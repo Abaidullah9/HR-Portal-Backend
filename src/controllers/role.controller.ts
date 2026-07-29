@@ -10,7 +10,7 @@ const addRole = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getAllRole = catchAsync(async (req: Request, res: Response) => {
-  const result = await roleServices.getAllRole();
+  const result = await roleServices.getAllRole(req.query as any);
   res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ALL_ROLES_FETCHED_SUCCESSFULLY, data: result });
 });
 

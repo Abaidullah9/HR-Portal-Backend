@@ -10,7 +10,7 @@ const addTeam = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getAllTeam = catchAsync(async (req: Request, res: Response) => {
-  const result = await teamServices.getAllTeam();
+  const result = await teamServices.getAllTeam(req.query as any);
   res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ALL_TEAMS_FETCHED_SUCCESSFULLY, data: result });
 });
 

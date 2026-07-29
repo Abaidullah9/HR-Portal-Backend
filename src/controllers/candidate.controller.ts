@@ -10,7 +10,7 @@ const addCandidate = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getAllCandidate = catchAsync(async (req: Request, res: Response) => {
-  const result = await candidateServices.getAllCandidate();
+  const result = await candidateServices.getAllCandidate(req.query as any);
   res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ALL_CANDIDATES_FETCHED_SUCCESSFULLY, data: result });
 });
 

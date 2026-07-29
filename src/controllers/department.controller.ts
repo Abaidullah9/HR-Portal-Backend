@@ -10,7 +10,7 @@ const addDepartment = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getAllDepartment = catchAsync(async (req: Request, res: Response) => {
-  const result = await departmentServices.getAllDepartment();
+  const result = await departmentServices.getAllDepartment(req.query as any);
   res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ALL_DEPARTMENTS_FETCHED_SUCCESSFULLY, data: result });
 });
 

@@ -10,7 +10,7 @@ const addJobPosting = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getAllJobPosting = catchAsync(async (req: Request, res: Response) => {
-  const result = await jobPostingServices.getAllJobPosting();
+  const result = await jobPostingServices.getAllJobPosting(req.query as any);
   res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ALL_JOB_POSTINGS_FETCHED_SUCCESSFULLY, data: result });
 });
 

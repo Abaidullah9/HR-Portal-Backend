@@ -10,7 +10,7 @@ const addReport = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getAllReport = catchAsync(async (req: Request, res: Response) => {
-  const result = await reportServices.getAllReport();
+  const result = await reportServices.getAllReport(req.query as any);
   res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ALL_REPORTS_FETCHED_SUCCESSFULLY, data: result });
 });
 

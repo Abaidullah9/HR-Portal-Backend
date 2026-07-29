@@ -10,7 +10,7 @@ const addAppraisal = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getAllAppraisal = catchAsync(async (req: Request, res: Response) => {
-  const result = await appraisalServices.getAllAppraisal();
+  const result = await appraisalServices.getAllAppraisal(req.query as any);
   res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ALL_APPRAISALS_FETCHED_SUCCESSFULLY, data: result });
 });
 

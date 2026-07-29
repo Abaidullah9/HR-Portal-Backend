@@ -10,7 +10,7 @@ const addPerformanceCycle = catchAsync(async (req: Request, res: Response) => {
 });
 
 const getAllPerformanceCycle = catchAsync(async (req: Request, res: Response) => {
-  const result = await performanceCycleServices.getAllPerformanceCycle();
+  const result = await performanceCycleServices.getAllPerformanceCycle(req.query as any);
   res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ALL_PERFORMANCE_CYCLES_FETCHED_SUCCESSFULLY, data: result });
 });
 

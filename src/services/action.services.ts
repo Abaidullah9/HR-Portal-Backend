@@ -1,76 +1,52 @@
-import Action from "../models/action.model";
+import { StatusCode } from "../utils/helper/constants/enum";
 import { AppError } from "../utils/helper/AppError";
-import { CreateActionDTO, UpdateActionDTO } from "../utils/dtos/action.dto";
-import { getPagination, paginatedResult, PaginationQuery } from "../utils/pagination";
-
+import actionModel from "../models/action.model";
+import { CreateActionDTO } from "../utils/dtos/action.dto";
+import { MESSAGES } from "../utils/helper/constants/messages";
+import { getPagination, paginatedResult, PaginationQuery } from "../utils/common";
 const addAction = async (actionData: CreateActionDTO) => {
-  if (!actionData.actionName || !actionData.actionDescription || !actionData.module) {
-    throw new AppError("Missing required fields: actionName, actionDescription, module", 400);
-  }
-
-  const existingAction = await Action.findOne({ actionName: actionData.actionName });
-  if (existingAction) {
-    throw new AppError("Action with this name already exists", 409);
-  }
-
-  const action = await Action.create(actionData);
-  return action;
+  const newAction = await actionModel.create(actionData);
+  return newAction;
 };
 
-const getAllAction = async (query?: PaginationQuery) => {
-  if (!query || (!query.page && !query.limit)) {
-    const actions = await Action.find();
-    return actions;
-  }
+const getAllAction = async (query: PaginationQuery) => {
   const { page, limit, skip } = getPagination(query);
-  const [actions, total] = await Promise.all([
-    Action.find().skip(skip).limit(limit),
-    Action.countDocuments(),
-  ]);
-  return paginatedResult(actions, total, page, limit);
+  const allActions = await actionModel.find().skip(skip).limit(limit);
+  const total = await actionModel.countDocuments();
+  return paginatedResult(allActions, total, page, limit);
 };
 
-const getActionById = async (actionId: string) => {
-  const action = await Action.findById(actionId);
-  if (!action) {
-    throw new AppError("Action not found", 404);
-  }
-  return action;
+const getActionById = async (_id: string) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const actionById = await actionModel.findById(_id);
+  if (!actionById) throw new AppError(MESSAGES.ACTION_NOT_FOUND, StatusCode.NOT_FOUND);
+  return actionById;
 };
 
-const getActionsByModule = async (module: string) => {
-  const actions = await Action.find({ module });
-  return actions;
+
+
+const updateAction = async (_id: string, updateData: Partial<CreateActionDTO>) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const updatedAction = await actionModel.findByIdAndUpdate(_id, updateData, { returnDocument: 'after' });
+  if (!updatedAction) throw new AppError(MESSAGES.ACTION_NOT_FOUND, StatusCode.NOT_FOUND);
+
+  return updatedAction;
 };
 
-const updateAction = async (actionId: string, updateData: UpdateActionDTO) => {
-  if (updateData.actionName) {
-    const existingAction = await Action.findOne({ actionName: updateData.actionName });
-    if (existingAction && existingAction._id.toString() !== actionId) {
-      throw new AppError("Action with this name already exists", 409);
-    }
-  }
+const deleteAction = async (_id: string) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const action = await Action.findByIdAndUpdate(actionId, updateData, { new: true, runValidators: true });
-  if (!action) {
-    throw new AppError("Action not found", 404);
-  }
-  return action;
-};
+  const deletedAction = await actionModel.findByIdAndDelete(_id);
 
-const deleteAction = async (actionId: string) => {
-  const action = await Action.findByIdAndDelete(actionId);
-  if (!action) {
-    throw new AppError("Action not found", 404);
-  }
-  return action;
+  return deletedAction;
 };
 
 export default {
   addAction,
   getAllAction,
   getActionById,
-  getActionsByModule,
   updateAction,
   deleteAction,
 };

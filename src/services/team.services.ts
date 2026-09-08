@@ -1,79 +1,61 @@
-import Team from "../models/team.model";
+import { StatusCode } from "../utils/helper/constants/enum";
 import { AppError } from "../utils/helper/AppError";
-import { CreateTeamDTO, UpdateTeamDTO } from "../utils/dtos/team.dto";
-import mongoose, { Types } from "mongoose";
-import { getPagination, paginatedResult, PaginationQuery } from "../utils/pagination";
+import teamModel from "../models/team.model";
+import { CreateTeamDTO } from "../utils/dtos/team.dto";
+import { MESSAGES } from "../utils/helper/constants/messages";
+import { getPagination, paginatedResult, PaginationQuery } from "../utils/common";
+import mongoose from "mongoose";
 
 const addTeam = async (teamData: CreateTeamDTO) => {
-  if (!teamData.teamName) {
-    throw new AppError("Team name is required", 400);
-  }
+  if (!teamData) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const existingTeam = await Team.findOne({ teamName: teamData.teamName });
-  if (existingTeam) {
-    throw new AppError("Team with this name already exists", 409);
-  }
-
-  const team = await Team.create(teamData);
-  return team;
+  const newTeam = await teamModel.create(teamData);
+  return newTeam;
 };
 
-const getAllTeam = async (query?: PaginationQuery) => {
-  if (!query || (!query.page && !query.limit)) {
-    const teams = await Team.find()
-      .populate("teamLeadId", "name email")
-      .populate("teamMembers.employeeId", "name email");
-    return teams;
-  }
+const getAllTeam = async (query: PaginationQuery) => {
   const { page, limit, skip } = getPagination(query);
-  const [teams, total] = await Promise.all([
-    Team.find().skip(skip).limit(limit)
-      .populate("teamLeadId", "name email")
-      .populate("teamMembers.employeeId", "name email"),
-    Team.countDocuments(),
-  ]);
-  return paginatedResult(teams, total, page, limit);
+  const allTeams = await teamModel.find()
+    .populate("teamLeadId", "name email")
+    .populate("teamMembers.employeeId", "name email")
+    .skip(skip)
+    .limit(limit);
+  const total = await teamModel.countDocuments();
+  if (!allTeams) throw new AppError(MESSAGES.TEAM_NOT_FOUND, StatusCode.NOT_FOUND);
+  return paginatedResult(allTeams, total, page, limit);
 };
 
-const getTeamById = async (teamId: string) => {
-  const team = await Team.findById(teamId)
+const getTeamById = async (_id: string) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const teamById = await teamModel.findById(_id)
     .populate("teamLeadId", "name email")
     .populate("teamMembers.employeeId", "name email");
-  if (!team) {
-    throw new AppError("Team not found", 404);
-  }
-  return team;
+  if (!teamById) throw new AppError(MESSAGES.TEAM_NOT_FOUND, StatusCode.NOT_FOUND);
+  return teamById;
 };
 
-const updateTeam = async (teamId: string, updateData: UpdateTeamDTO) => {
-  if (updateData.teamName) {
-    const existingTeam = await Team.findOne({ teamName: updateData.teamName });
-    if (existingTeam && existingTeam._id.toString() !== teamId) {
-      throw new AppError("Team with this name already exists", 409);
-    }
-  }
+const updateTeam = async (_id: string, updateData: Partial<CreateTeamDTO>) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const team = await Team.findByIdAndUpdate(teamId, updateData, { new: true, runValidators: true })
+  const updatedTeam = await teamModel.findByIdAndUpdate(_id, updateData, { returnDocument: 'after' })
     .populate("teamLeadId", "name email")
     .populate("teamMembers.employeeId", "name email");
-  if (!team) {
-    throw new AppError("Team not found", 404);
-  }
-  return team;
+  if (!updatedTeam) throw new AppError(MESSAGES.TEAM_NOT_FOUND, StatusCode.NOT_FOUND);
+
+  return updatedTeam;
 };
 
-const addTeamMember = async (teamId: string, employeeId: string) => {
-  const team = await Team.findById(teamId);
-  if (!team) {
-    throw new AppError("Team not found", 404);
-  }
+const addTeamMember = async (_id: string, employeeId: string) => {
+  if (!_id || !employeeId) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const team = await teamModel.findById(_id);
+  if (!team) throw new AppError(MESSAGES.TEAM_NOT_FOUND, StatusCode.NOT_FOUND);
 
   const isMember = team.teamMembers.some(
-    (member: { employeeId: Types.ObjectId }) => member.employeeId.toString() === employeeId
+    (member: { employeeId: mongoose.Types.ObjectId }) => member.employeeId.toString() === employeeId
   );
-  if (isMember) {
-    throw new AppError("Employee is already a member of this team", 409);
-  }
+  if (isMember) throw new AppError(MESSAGES.ALREADY_A_MEMBER, StatusCode.CONFLICT);
 
   team.teamMembers.push({ employeeId: new mongoose.Types.ObjectId(employeeId) });
   await team.save();
@@ -81,18 +63,16 @@ const addTeamMember = async (teamId: string, employeeId: string) => {
   return team.populate(["teamLeadId", "teamMembers.employeeId"]);
 };
 
-const removeTeamMember = async (teamId: string, employeeId: string) => {
-  const team = await Team.findById(teamId);
-  if (!team) {
-    throw new AppError("Team not found", 404);
-  }
+const removeTeamMember = async (_id: string, employeeId: string) => {
+  if (!_id || !employeeId) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const team = await teamModel.findById(_id);
+  if (!team) throw new AppError(MESSAGES.TEAM_NOT_FOUND, StatusCode.NOT_FOUND);
 
   const memberIndex = team.teamMembers.findIndex(
-    (member: { employeeId: Types.ObjectId }) => member.employeeId.toString() === employeeId
+    (member: { employeeId: mongoose.Types.ObjectId }) => member.employeeId.toString() === employeeId
   );
-  if (memberIndex === -1) {
-    throw new AppError("Employee is not a member of this team", 404);
-  }
+  if (memberIndex === -1) throw new AppError(MESSAGES.NOT_A_MEMBER, StatusCode.NOT_FOUND);
 
   team.teamMembers.splice(memberIndex, 1);
   await team.save();
@@ -100,12 +80,12 @@ const removeTeamMember = async (teamId: string, employeeId: string) => {
   return team.populate(["teamLeadId", "teamMembers.employeeId"]);
 };
 
-const deleteTeam = async (teamId: string) => {
-  const team = await Team.findByIdAndDelete(teamId);
-  if (!team) {
-    throw new AppError("Team not found", 404);
-  }
-  return team;
+const deleteTeam = async (_id: string) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const deletedTeam = await teamModel.findByIdAndDelete(_id);
+
+  return deletedTeam;
 };
 
 export default {

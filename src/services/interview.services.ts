@@ -1,79 +1,84 @@
-import Interview from "../models/interview.model";
-import { AppError, MongoFilter } from "../utils/helper/AppError";
-import { CreateInterviewDTO, UpdateInterviewDTO } from "../utils/dtos/interview.dto";
+import { StatusCode } from "../utils/helper/constants/enum";
+import { AppError } from "../utils/helper/AppError";
+import interviewModel from "../models/interview.model";
+import { CreateInterviewDTO } from "../utils/dtos/interview.dto";
+import { MESSAGES } from "../utils/helper/constants/messages";
+import { getPagination, paginatedResult, PaginationQuery } from "../utils/common";
 const addInterview = async (interviewData: CreateInterviewDTO) => {
-  if (!interviewData.candidateId || !interviewData.interviewerId || !interviewData.scheduledAt || 
-      !interviewData.mode || !interviewData.round) {
-    throw new AppError("Missing required fields: candidateId, interviewerId, scheduledAt, mode, round", 400);
-  }
+  if (!interviewData) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const interview = await Interview.create(interviewData);
-  return interview;
+  const newInterview = await interviewModel.create(interviewData);
+  return newInterview;
 };
+const getAllInterview = async (query: PaginationQuery) => {
+  const { page, limit, skip } = getPagination(query);
+  const allInterviews = await interviewModel.find().populate("candidateId", "name email phone status").populate("interviewerId", "name email employeeCode").skip(skip).limit(limit);
+  const total = await interviewModel.countDocuments();
+  return paginatedResult(allInterviews, total, page, limit);
+}
+const getInterviewById = async (_id: string) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-const getInterviewById = async (interviewId: string) => {
-  const interview = await Interview.findById(interviewId)
-    .populate("candidateId", "name email")
-    .populate("interviewerId", "name email");
-  if (!interview) {
-    throw new AppError("Interview not found", 404);
-  }
-  return interview;
+  const interviewById = await interviewModel.findById(_id).populate("candidateId", "name email phone status").populate("interviewerId", "name email employeeCode");
+  if (!interviewById) throw new AppError(MESSAGES.INTERVIEW_NOT_FOUND, StatusCode.NOT_FOUND);
+  return interviewById;
 };
 
 const getInterviewsByCandidate = async (candidateId: string) => {
-  const interviews = await Interview.find({ candidateId })
-    .populate("interviewerId", "name email")
-    .sort({ scheduledAt: 1 });
+  if (!candidateId) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const interviews = await interviewModel.find({ candidateId }).populate("candidateId", "name email phone status").populate("interviewerId", "name email employeeCode");
+  if (!interviews) throw new AppError(MESSAGES.INTERVIEW_NOT_FOUND, StatusCode.NOT_FOUND);
   return interviews;
 };
 
 const getInterviewsByInterviewer = async (interviewerId: string) => {
-  const interviews = await Interview.find({ interviewerId })
-    .populate("candidateId", "name email")
-    .sort({ scheduledAt: 1 });
+  if (!interviewerId) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const interviews = await interviewModel.find({ interviewerId }).populate("candidateId", "name email phone status").populate("interviewerId", "name email employeeCode");
+  if (!interviews) throw new AppError(MESSAGES.INTERVIEW_NOT_FOUND, StatusCode.NOT_FOUND);
   return interviews;
 };
 
 const getInterviewsByStatus = async (status: string) => {
-  const queryFilter: MongoFilter = { status };
-  const interviews = await Interview.find(queryFilter)
-    .populate("candidateId", "name email")
-    .populate("interviewerId", "name email")
-    .sort({ scheduledAt: 1 });
+  if (!status) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const filter: Record<string, unknown> = { status };
+  const interviews = await interviewModel.find(filter).populate("candidateId", "name email phone status").populate("interviewerId", "name email employeeCode");
+  if (!interviews) throw new AppError(MESSAGES.INTERVIEW_NOT_FOUND, StatusCode.NOT_FOUND);
   return interviews;
 };
 
-const updateInterview = async (interviewId: string, updateData: UpdateInterviewDTO) => {
-  const interview = await Interview.findByIdAndUpdate(interviewId, updateData, { new: true, runValidators: true })
-    .populate("candidateId", "name email")
-    .populate("interviewerId", "name email");
-  if (!interview) {
-    throw new AppError("Interview not found", 404);
-  }
-  return interview;
+const updateInterview = async (_id: string, updateData: Partial<CreateInterviewDTO>) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const updatedInterview = await interviewModel.findByIdAndUpdate(_id, updateData, { returnDocument: 'after' }).populate("candidateId", "name email phone status").populate("interviewerId", "name email employeeCode");
+  if (!updatedInterview) throw new AppError(MESSAGES.INTERVIEW_NOT_FOUND, StatusCode.NOT_FOUND);
+
+  return updatedInterview;
 };
 
-const updateInterviewStatus = async (interviewId: string, status: 'scheduled' | 'completed' | 'cancelled' | 'no-show') => {
-  const interview = await Interview.findByIdAndUpdate(interviewId, { status }, { new: true })
-    .populate("candidateId", "name email")
-    .populate("interviewerId", "name email");
-  if (!interview) {
-    throw new AppError("Interview not found", 404);
-  }
-  return interview;
+const updateInterviewStatus = async (_id: string, status: string) => {
+  if (!_id || !status) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const updateFilter: Record<string, unknown> = { status };
+  const updatedInterview = await interviewModel.findByIdAndUpdate(_id, updateFilter, { returnDocument: 'after' }).populate("candidateId", "name email phone status").populate("interviewerId", "name email employeeCode");
+  if (!updatedInterview) throw new AppError(MESSAGES.INTERVIEW_NOT_FOUND, StatusCode.NOT_FOUND);
+
+  return updatedInterview;
 };
 
-const deleteInterview = async (interviewId: string) => {
-  const interview = await Interview.findByIdAndDelete(interviewId);
-  if (!interview) {
-    throw new AppError("Interview not found", 404);
-  }
-  return interview;
+const deleteInterview = async (_id: string) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const deletedInterview = await interviewModel.findByIdAndDelete(_id);
+
+  return deletedInterview;
 };
 
 export default {
   addInterview,
+  getAllInterview,
   getInterviewById,
   getInterviewsByCandidate,
   getInterviewsByInterviewer,

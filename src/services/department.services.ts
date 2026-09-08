@@ -1,82 +1,63 @@
-import Department from "../models/department.model";
+import { StatusCode } from "../utils/helper/constants/enum";
 import { AppError } from "../utils/helper/AppError";
-import { CreateDepartmentDTO, UpdateDepartmentDTO } from "../utils/dtos/department.dto";
-import { getPagination, paginatedResult, PaginationQuery } from "../utils/pagination";
+import departmentModel from "../models/department.model";
+import { CreateDepartmentDTO } from "../utils/dtos/department.dto";
+import { MESSAGES } from "../utils/helper/constants/messages";
+import { getPagination, paginatedResult, PaginationQuery } from "../utils/common";
 
 const addDepartment = async (departmentData: CreateDepartmentDTO) => {
-  if (!departmentData.name) {
-    throw new AppError("Department name is required", 400);
-  }
+  if (!departmentData) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const existingDept = await Department.findOne({ name: departmentData.name });
-  if (existingDept) {
-    throw new AppError("Department with this name already exists", 409);
-  }
-
-  const department = await Department.create(departmentData);
-  return department;
+  const newDepartment = await departmentModel.create(departmentData);
+  return newDepartment;
 };
 
-const getAllDepartment = async (query?: PaginationQuery) => {
-  if (!query || (!query.page && !query.limit)) {
-    const departments = await Department.find()
-      .populate("managerId", "name email")
-      .populate("parentId", "name");
-    return departments;
-  }
+const getAllDepartment = async (query: PaginationQuery) => {
   const { page, limit, skip } = getPagination(query);
-  const [departments, total] = await Promise.all([
-    Department.find()
-      .skip(skip).limit(limit)
-      .populate("managerId", "name email")
-      .populate("parentId", "name"),
-    Department.countDocuments(),
-  ]);
-  return paginatedResult(departments, total, page, limit);
+  const allDepartments = await departmentModel.find()
+    .populate("managerId", "name email")
+    .populate("parentId", "name")
+    .skip(skip)
+    .limit(limit);
+  const total = await departmentModel.countDocuments();
+  return paginatedResult(allDepartments, total, page, limit);
 };
 
-const getDepartmentById = async (departmentId: string) => {
-  const department = await Department.findById(departmentId)
+const getDepartmentById = async (_id: string) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const departmentById = await departmentModel.findById(_id)
     .populate("managerId", "name email")
     .populate("parentId", "name");
-  if (!department) {
-    throw new AppError("Department not found", 404);
-  }
-  return department;
+  if (!departmentById) throw new AppError(MESSAGES.DEPARTMENT_NOT_FOUND, StatusCode.NOT_FOUND);
+  return departmentById;
 };
 
 const getChildDepartments = async (parentId: string) => {
-  const departments = await Department.find({ parentId }).populate("managerId", "name email");
+  if (!parentId) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const departments = await departmentModel.find({ parentId }).populate("managerId", "name email");
+  if (!departments) throw new AppError(MESSAGES.DEPARTMENT_NOT_FOUND, StatusCode.NOT_FOUND);
   return departments;
 };
 
-const updateDepartment = async (departmentId: string, updateData: UpdateDepartmentDTO) => {
-  if (updateData.name) {
-    const existingDept = await Department.findOne({ name: updateData.name });
-    if (existingDept && existingDept._id.toString() !== departmentId) {
-      throw new AppError("Department with this name already exists", 409);
-    }
-  }
+const updateDepartment = async (_id: string, updateData: Partial<CreateDepartmentDTO>) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const department = await Department.findByIdAndUpdate(departmentId, updateData, { new: true, runValidators: true });
-  if (!department) {
-    throw new AppError("Department not found", 404);
-  }
-  return department;
+  const updatedDepartment = await departmentModel.findByIdAndUpdate(_id, updateData, { returnDocument: 'after' })
+    .populate("managerId", "name email")
+    .populate("parentId", "name");
+  if (!updatedDepartment) throw new AppError(MESSAGES.DEPARTMENT_NOT_FOUND, StatusCode.NOT_FOUND);
+
+  return updatedDepartment;
 };
 
-const deleteDepartment = async (departmentId: string) => {
-  // Check if department has child departments
-  const children = await Department.countDocuments({ parentId: departmentId });
-  if (children > 0) {
-    throw new AppError("Cannot delete department with child departments. Reassign or delete children first.", 400);
-  }
+const deleteDepartment = async (_id: string) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const department = await Department.findByIdAndDelete(departmentId);
-  if (!department) {
-    throw new AppError("Department not found", 404);
-  }
-  return department;
+  const deletedDepartment = await departmentModel.findByIdAndDelete(_id);
+
+  return deletedDepartment;
 };
 
 export default {

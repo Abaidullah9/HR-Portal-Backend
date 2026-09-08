@@ -1,55 +1,94 @@
 import { Request, Response } from "express";
-import catchAsync from "../utils/helper/catchAsync";
+import { sendErrorResponse } from "../utils/helper/sendError";
 import candidateServices from "../services/candidate.services";
 import { MESSAGES } from "../utils/helper/constants/messages";
 import { StatusCode } from "../utils/helper/constants/enum";
+import { AppError } from "../utils/helper/AppError";
+import { CreateCandidateDTO, UpdateCandidateDTO } from "../utils/dtos/candidate.dto";
+import { PaginationQuery } from "../utils/common";
 
-const addCandidate = catchAsync(async (req: Request, res: Response) => {
-  const result = await candidateServices.addCandidate(req.body);
-  res.status(StatusCode.CREATED).json({ success: true, message: MESSAGES.CANDIDATE_ADDED_SUCCESSFULLY, data: result });
-});
+const addCandidate = async (req: Request, res: Response) => {
+  try {
+    const body: CreateCandidateDTO = req.body;
+    const newCandidate = await candidateServices.addCandidate(body);
+    if (!newCandidate) throw new AppError(MESSAGES.FAILED_TO_CREATE_CANDIDATE, StatusCode.INTERNAL_SERVER_ERROR);
+    res.status(StatusCode.CREATED).json({ success: true, message: MESSAGES.CANDIDATE_ADDED_SUCCESSFULLY, data: newCandidate });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
-const getAllCandidate = catchAsync(async (req: Request, res: Response) => {
-  const result = await candidateServices.getAllCandidate(req.query as any);
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ALL_CANDIDATES_FETCHED_SUCCESSFULLY, data: result });
-});
+const getAllCandidate = async (req: Request, res: Response) => {
+  try {
+    const { data, pagination } = await candidateServices.getAllCandidate(req.query as PaginationQuery);
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ALL_CANDIDATES_FETCHED_SUCCESSFULLY, data, pagination });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
-const getCandidateById = catchAsync(async (req: Request, res: Response) => {
-  const { _id } = req.params;
-  const result = await candidateServices.getCandidateById(_id as string);
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.CANDIDATE_FETCHED_SUCCESSFULLY, data: result });
-});
+const getCandidateById = async (req: Request, res: Response) => {
+  try {
+    const { _id } = req.params;
+    const result = await candidateServices.getCandidateById(_id as string);
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.CANDIDATE_FETCHED_SUCCESSFULLY, data: result });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
-const getCandidateByJobPosting = catchAsync(async (req: Request, res: Response) => {
-  const { jobPostingId } = req.params;
-  const result = await candidateServices.getCandidatesByJobPosting(jobPostingId as string);
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ALL_CANDIDATES_FETCHED_SUCCESSFULLY, data: result });
-});
+const getCandidateByJobPosting = async (req: Request, res: Response) => {
+  try {
+    const { jobPostingId } = req.params;
+    const result = await candidateServices.getCandidatesByJobPosting(jobPostingId as string);
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ALL_CANDIDATES_FETCHED_SUCCESSFULLY, data: result });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
-const getCandidateByStatus = catchAsync(async (req: Request, res: Response) => {
-  const { status } = req.params;
-  const result = await candidateServices.getCandidatesByStatus(status as string);
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ALL_CANDIDATES_FETCHED_SUCCESSFULLY, data: result });
-});
+const getCandidateByStatus = async (req: Request, res: Response) => {
+  try {
+    const { status } = req.params;
+    const result = await candidateServices.getCandidatesByStatus(status as string);
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ALL_CANDIDATES_FETCHED_SUCCESSFULLY, data: result });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
-const updateCandidate = catchAsync(async (req: Request, res: Response) => {
-  const { _id } = req.params;
-  const result = await candidateServices.updateCandidate(_id as string, req.body);
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.CANDIDATE_UPDATED_SUCCESSFULLY, data: result });
-});
+const updateCandidate = async (req: Request, res: Response) => {
+  try {
+    const { _id } = req.params;
+    const updateData: UpdateCandidateDTO = req.body;
+    const result = await candidateServices.updateCandidate(_id as string, updateData);
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.CANDIDATE_UPDATED_SUCCESSFULLY, data: result });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
-const updateCandidateStatus = catchAsync(async (req: Request, res: Response) => {
-  const { _id } = req.params;
-  const { status } = req.body;
-  const result = await candidateServices.updateCandidateStatus(_id as string, status);
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.CANDIDATE_UPDATED_SUCCESSFULLY, data: result });
-});
+const updateCandidateStatus = async (req: Request, res: Response) => {
+  try {
+    const { _id } = req.params;
+    const { status }: { status: string } = req.body;
+    const result = await candidateServices.updateCandidateStatus(_id as string, status as 'applied' | 'screening' | 'interview' | 'offered' | 'hired' | 'rejected');
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.CANDIDATE_UPDATED_SUCCESSFULLY, data: result });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
-const deleteCandidate = catchAsync(async (req: Request, res: Response) => {
-  const { _id } = req.params;
-  await candidateServices.deleteCandidate(_id as string);
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.CANDIDATE_DELETED_SUCCESSFULLY, data: null });
-});
+const deleteCandidate = async (req: Request, res: Response) => {
+  try {
+    const { _id } = req.params;
+    const deletedCandidate = await candidateServices.deleteCandidate(_id as string);
+    if (!deletedCandidate) throw new AppError(MESSAGES.CANDIDATE_NOT_FOUND, StatusCode.NOT_FOUND);
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.CANDIDATE_DELETED_SUCCESSFULLY, data: deletedCandidate });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
 export default {
   addCandidate,

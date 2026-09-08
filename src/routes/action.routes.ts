@@ -5,11 +5,10 @@ import actionController from "../controllers/action.controller";
 
 const router = Router();
 
-router.get("/", actionController.getAllAction);
-router.get("/module/:module", actionController.getActionByModule);
-router.get("/:_id", actionController.getActionById);
-router.post("/", isAuthenticated, authorize("Actions", "create"), actionController.addAction);
-router.patch("/:_id", isAuthenticated, authorize("Actions", "update"), actionController.updateAction);
-router.delete("/:_id", isAuthenticated, authorize("Actions", "delete"), actionController.deleteAction);
+router.get("/paginated", isAuthenticated, authorize("read_Action"), actionController.getAllAction);
+router.get("/:_id", isAuthenticated, authorize("read_Action"), actionController.getActionById);
+router.post("/", isAuthenticated, authorize("create_Action"), actionController.addAction);
+router.patch("/:_id", isAuthenticated, authorize("update_Action"), actionController.updateAction);
+router.delete("/:_id", isAuthenticated, authorize("delete_Action"), actionController.deleteAction);
 
 export default router;

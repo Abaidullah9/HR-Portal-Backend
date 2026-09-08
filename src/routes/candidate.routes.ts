@@ -5,13 +5,13 @@ import candidateController from "../controllers/candidate.controller";
 
 const router = Router();
 
-router.get("/", candidateController.getAllCandidate);
-router.get("/job-posting/:jobPostingId", candidateController.getCandidateByJobPosting);
-router.get("/status/:status", candidateController.getCandidateByStatus);
-router.get("/:_id", candidateController.getCandidateById);
-router.post("/", isAuthenticated, authorize("Candidate", "create"), candidateController.addCandidate);
-router.patch("/:_id", isAuthenticated, authorize("Candidate", "update"), candidateController.updateCandidate);
-router.patch("/:_id/status", isAuthenticated, authorize("Candidate", "updateStatus"), candidateController.updateCandidateStatus);
-router.delete("/:_id", isAuthenticated, authorize("Candidate", "delete"), candidateController.deleteCandidate);
+router.get("/paginated", isAuthenticated, authorize("read_Candidate"), candidateController.getAllCandidate);
+router.get("/job-posting/:jobPostingId", isAuthenticated, authorize("read_Candidate"), candidateController.getCandidateByJobPosting);
+router.get("/status/:status", isAuthenticated, authorize("read_Candidate"), candidateController.getCandidateByStatus);
+router.get("/:_id", isAuthenticated, authorize("read_Candidate"), candidateController.getCandidateById);
+router.post("/", isAuthenticated, authorize("create_Candidate"), candidateController.addCandidate);
+router.patch("/:_id/status", isAuthenticated, authorize("update_CandidateStatus"), candidateController.updateCandidateStatus);
+router.patch("/:_id", isAuthenticated, authorize("update_Candidate"), candidateController.updateCandidate);
+router.delete("/:_id", isAuthenticated, authorize("delete_Candidate"), candidateController.deleteCandidate);
 
 export default router;

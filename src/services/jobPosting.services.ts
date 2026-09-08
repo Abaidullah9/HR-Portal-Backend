@@ -1,88 +1,90 @@
-import JobPosting from "../models/jobPosting.model";
-import { AppError, MongoFilter } from "../utils/helper/AppError";
-import { CreateJobPostingDTO, UpdateJobPostingDTO } from "../utils/dtos/jobPosting.dto";
-import { getPagination, paginatedResult, PaginationQuery } from "../utils/pagination";
+import { StatusCode } from "../utils/helper/constants/enum";
+import { AppError } from "../utils/helper/AppError";
+import jobPostingModel from "../models/jobPosting.model";
+import { CreateJobPostingDTO } from "../utils/dtos/jobPosting.dto";
+import { MESSAGES } from "../utils/helper/constants/messages";
+import { getPagination, paginatedResult, PaginationQuery } from "../utils/common";
+
 const addJobPosting = async (postingData: CreateJobPostingDTO) => {
-  if (!postingData.position || !postingData.departmentId || !postingData.description || !postingData.postedBy) {
-    throw new AppError("Missing required fields: position, departmentId, description, postedBy", 400);
-  }
+  if (!postingData) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const jobPosting = await JobPosting.create(postingData);
-  return jobPosting;
+  const newPosting = await jobPostingModel.create(postingData);
+  return newPosting;
 };
 
-const getAllJobPosting = async (query?: PaginationQuery) => {
-  if (!query || (!query.page && !query.limit)) {
-    const postings = await JobPosting.find()
-      .populate("departmentId", "name")
-      .populate("postedBy", "name email")
-      .sort({ postedOnDate: -1 });
-    return postings;
-  }
+const getAllJobPosting = async (query: PaginationQuery) => {
   const { page, limit, skip } = getPagination(query);
-  const [postings, total] = await Promise.all([
-    JobPosting.find()
-      .skip(skip).limit(limit)
-      .populate("departmentId", "name")
-      .populate("postedBy", "name email")
-      .sort({ postedOnDate: -1 }),
-    JobPosting.countDocuments(),
-  ]);
-  return paginatedResult(postings, total, page, limit);
+  const allPostings = await jobPostingModel.find()
+    .populate("departmentId", "name")
+    .populate("postedBy", "name email")
+    .sort({ postedOnDate: -1 })
+    .skip(skip)
+    .limit(limit);
+  const total = await jobPostingModel.countDocuments();
+  return paginatedResult(allPostings, total, page, limit);
 };
 
-const getJobPostingById = async (postingId: string) => {
-  const posting = await JobPosting.findById(postingId)
+const getJobPostingById = async (_id: string) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const postingById = await jobPostingModel.findById(_id)
     .populate("departmentId", "name")
     .populate("postedBy", "name email");
-  if (!posting) {
-    throw new AppError("Job posting not found", 404);
-  }
-  return posting;
+  if (!postingById) throw new AppError(MESSAGES.JOB_POSTING_NOT_FOUND, StatusCode.NOT_FOUND);
+  return postingById;
 };
 
 const getJobPostingsByDepartment = async (departmentId: string) => {
-  const postings = await JobPosting.find({ departmentId })
+  if (!departmentId) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const postings = await jobPostingModel.find({ departmentId })
     .populate("postedBy", "name email")
     .sort({ postedOnDate: -1 });
+    if (!postings) throw new AppError(MESSAGES.JOB_POSTING_NOT_FOUND, StatusCode.NOT_FOUND);
   return postings;
 };
 
 const getJobPostingsByStatus = async (status: string) => {
-  const queryFilter: MongoFilter = { status };
-  const postings = await JobPosting.find(queryFilter)
+  if (!status) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const filter: Record<string, unknown> = { status : status };
+  const postings = await jobPostingModel.find(filter)
     .populate("departmentId", "name")
     .populate("postedBy", "name email")
     .sort({ postedOnDate: -1 });
+    if (!postings) throw new AppError(MESSAGES.JOB_POSTING_NOT_FOUND, StatusCode.NOT_FOUND);
   return postings;
 };
 
-const updateJobPosting = async (postingId: string, updateData: UpdateJobPostingDTO) => {
-  const posting = await JobPosting.findByIdAndUpdate(postingId, updateData, { new: true, runValidators: true })
+const updateJobPosting = async (_id: string, updateData: Partial<CreateJobPostingDTO>) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const updatedPosting = await jobPostingModel.findByIdAndUpdate(_id, updateData, { returnDocument: 'after' })
     .populate("departmentId", "name")
     .populate("postedBy", "name email");
-  if (!posting) {
-    throw new AppError("Job posting not found", 404);
-  }
-  return posting;
+  if (!updatedPosting) throw new AppError(MESSAGES.JOB_POSTING_NOT_FOUND, StatusCode.NOT_FOUND);
+
+  return updatedPosting;
 };
 
-const updateJobPostingStatus = async (postingId: string, status: 'open' | 'closed' | 'on-hold') => {
-  const posting = await JobPosting.findByIdAndUpdate(postingId, { status }, { new: true })
+const updateJobPostingStatus = async (_id: string, status: string) => {
+  if (!_id || !status) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const updateFilter: Record<string, unknown> = { status };
+  const updatedPosting = await jobPostingModel.findByIdAndUpdate(_id, updateFilter, { returnDocument: 'after' })
     .populate("departmentId", "name")
     .populate("postedBy", "name email");
-  if (!posting) {
-    throw new AppError("Job posting not found", 404);
-  }
-  return posting;
+  if (!updatedPosting) throw new AppError(MESSAGES.JOB_POSTING_NOT_FOUND, StatusCode.NOT_FOUND);
+
+  return updatedPosting;
 };
 
-const deleteJobPosting = async (postingId: string) => {
-  const posting = await JobPosting.findByIdAndDelete(postingId);
-  if (!posting) {
-    throw new AppError("Job posting not found", 404);
-  }
-  return posting;
+const deleteJobPosting = async (_id: string) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const deletedPosting = await jobPostingModel.findByIdAndDelete(_id);
+
+  return deletedPosting;
 };
 
 export default {

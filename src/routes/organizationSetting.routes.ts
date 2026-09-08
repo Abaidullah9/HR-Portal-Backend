@@ -5,9 +5,9 @@ import organizationSettingController from "../controllers/organizationSetting.co
 
 const router = Router();
 
-router.get("/", organizationSettingController.getOrganizationSettings);
-router.post("/", isAuthenticated, authorize("Organization", "create"), organizationSettingController.addOrUpdateOrganization);
-router.patch("/", isAuthenticated, authorize("Organization", "update"), organizationSettingController.updateOrganizationSettings);
-router.delete("/", isAuthenticated, authorize("Organization", "delete"), organizationSettingController.deleteOrganizationSettings);
+router.get("/", isAuthenticated, authorize("read_OrganizationSetting"), organizationSettingController.getOrganizationSettings);
+router.post("/", isAuthenticated, authorize("create_OrganizationSetting"), organizationSettingController.addOrUpdateOrganization);
+router.patch("/", isAuthenticated, authorize("update_OrganizationSetting"), organizationSettingController.updateOrganizationSettings);
+router.delete("/", isAuthenticated, authorize("delete_OrganizationSetting"), organizationSettingController.deleteOrganizationSettings);
 
 export default router;

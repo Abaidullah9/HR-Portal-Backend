@@ -1,67 +1,141 @@
 import { Request, Response } from "express";
-import catchAsync from "../utils/helper/catchAsync";
+import { sendErrorResponse } from "../utils/helper/sendError";
 import leaveRequestServices from "../services/leaveRequest.services";
 import { MESSAGES } from "../utils/helper/constants/messages";
 import { StatusCode } from "../utils/helper/constants/enum";
+import { AppError } from "../utils/helper/AppError";
+import { CreateLeaveRequestDTO, UpdateLeaveRequestDTO, ApproveRejectLeaveDTO } from "../utils/dtos/leaveRequest.dto";
+import { PaginationQuery } from "../utils/common";
+import { resolveReadScope } from "../utils/helper/ownership";
 
-const addLeaveRequest = catchAsync(async (req: Request, res: Response) => {
-  const result = await leaveRequestServices.addLeaveRequest(req.body);
-  res.status(StatusCode.CREATED).json({ success: true, message: MESSAGES.LEAVE_REQUEST_ADDED_SUCCESSFULLY, data: result });
-});
+const addLeaveRequest = async (req: Request, res: Response) => {
+  try {
+    const body: CreateLeaveRequestDTO = req.body;
+    const newRequest = await leaveRequestServices.addLeaveRequest(body);
+    if (!newRequest) throw new AppError(MESSAGES.FAILED_TO_CREATE_LEAVE_REQUEST, StatusCode.INTERNAL_SERVER_ERROR);
+    res.status(StatusCode.CREATED).json({ success: true, message: MESSAGES.LEAVE_REQUEST_ADDED_SUCCESSFULLY, data: newRequest });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
-const getLeaveRequestById = catchAsync(async (req: Request, res: Response) => {
-  const { _id } = req.params;
-  const result = await leaveRequestServices.getLeaveRequestById(_id as string);
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.LEAVE_REQUEST_FETCHED_SUCCESSFULLY, data: result });
-});
+const getAllLeaveRequest = async (req: Request, res: Response) => {
+  try {
+    const scope = await resolveReadScope(req.userId!);
+    const { data, pagination } = await leaveRequestServices.getAllLeaveRequest(req.query as PaginationQuery, scope);
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ALL_LEAVE_REQUESTS_FETCHED_SUCCESSFULLY, data, pagination });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
-const getLeaveRequestsByEmployee = catchAsync(async (req: Request, res: Response) => {
-  const { employeeId } = req.params;
-  const result = await leaveRequestServices.getLeaveRequestsByEmployee(employeeId as string);
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.LEAVE_REQUEST_FETCHED_SUCCESSFULLY, data: result });
-});
+const getLeaveRequestById = async (req: Request, res: Response) => {
+  try {
+    const { _id } = req.params;
+    const scope = await resolveReadScope(req.userId!);
+    const result = await leaveRequestServices.getLeaveRequestById(_id as string, scope);
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.LEAVE_REQUEST_FETCHED_SUCCESSFULLY, data: result });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
-const getLeaveRequestsByStatus = catchAsync(async (req: Request, res: Response) => {
-  const { status } = req.params;
-  const result = await leaveRequestServices.getLeaveRequestsByStatus(status as string);
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.LEAVE_REQUEST_FETCHED_SUCCESSFULLY, data: result });
-});
+const getLeaveRequestsByEmployee = async (req: Request, res: Response) => {
+  try {
+    const { employeeId } = req.params;
+    const scope = await resolveReadScope(req.userId!);
+    const result = await leaveRequestServices.getLeaveRequestsByEmployee(employeeId as string, scope);
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.LEAVE_REQUEST_FETCHED_SUCCESSFULLY, data: result });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
-const getLeaveRequestsByDateRange = catchAsync(async (req: Request, res: Response) => {
-  const { startDate, endDate } = req.query;
-  const result = await leaveRequestServices.getLeaveRequestsByDateRange(
-    new Date(startDate as string),
-    new Date(endDate as string)
-  );
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.LEAVE_REQUEST_FETCHED_SUCCESSFULLY, data: result });
-});
+const getLeaveRequestsByStatus = async (req: Request, res: Response) => {
+  try {
+    const { status } = req.params;
+    const scope = await resolveReadScope(req.userId!);
+    const result = await leaveRequestServices.getLeaveRequestsByStatus(status as string, scope);
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.LEAVE_REQUEST_FETCHED_SUCCESSFULLY, data: result });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
-const updateLeaveRequest = catchAsync(async (req: Request, res: Response) => {
-  const { _id } = req.params;
-  const result = await leaveRequestServices.updateLeaveRequest(_id as string, req.body);
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.LEAVE_REQUEST_UPDATED_SUCCESSFULLY, data: result });
-});
+const getLeaveRequestsByDateRange = async (req: Request, res: Response) => {
+  try {
+    const { startDate, endDate }: { startDate?: string; endDate?: string } = req.query;
+  
+    if (!startDate || !endDate) {
+      throw new AppError(MESSAGES.DATE_RANGE_REQUIRED, StatusCode.BAD_REQUEST);
+    }
+  
+    const parsedStart = new Date(startDate);
+    const parsedEnd = new Date(endDate);    if (isNaN(parsedStart.getTime()) || isNaN(parsedEnd.getTime())) {
+      throw new AppError(MESSAGES.INVALID_DATE_FORMAT, StatusCode.BAD_REQUEST);
+    }
 
-const approveRejectLeave = catchAsync(async (req: Request, res: Response) => {
-  const { _id } = req.params;
-  const result = await leaveRequestServices.approveRejectLeave(_id as string, req.body);
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.LEAVE_REQUEST_UPDATED_SUCCESSFULLY, data: result });
-});
+    const scope = await resolveReadScope(req.userId!);
+    const result = await leaveRequestServices.getLeaveRequestsByDateRange(
+      parsedStart,
+      parsedEnd,
+      scope
+    );
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.LEAVE_REQUEST_FETCHED_SUCCESSFULLY, data: result });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
-const cancelLeaveRequest = catchAsync(async (req: Request, res: Response) => {
-  const { _id } = req.params;
-  const result = await leaveRequestServices.cancelLeaveRequest(_id as string);
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.LEAVE_REQUEST_CANCELLED_SUCCESSFULLY, data: result });
-});
+const updateLeaveRequest = async (req: Request, res: Response) => {
+  try {
+    const { _id } = req.params;
+    const updateData: UpdateLeaveRequestDTO = req.body;
+    const scope = await resolveReadScope(req.userId!);
+    const result = await leaveRequestServices.updateLeaveRequest(_id as string, updateData, scope);
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.LEAVE_REQUEST_UPDATED_SUCCESSFULLY, data: result });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
-const deleteLeaveRequest = catchAsync(async (req: Request, res: Response) => {
-  const { _id } = req.params;
-  await leaveRequestServices.deleteLeaveRequest(_id as string);
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.LEAVE_REQUEST_DELETED_SUCCESSFULLY, data: null });
-});
+const approveRejectLeave = async (req: Request, res: Response) => {
+  try {
+    const { _id } = req.params;
+    const approvalData: ApproveRejectLeaveDTO = req.body;
+    const result = await leaveRequestServices.approveRejectLeave(_id as string, approvalData);
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.LEAVE_REQUEST_UPDATED_SUCCESSFULLY, data: result });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
+
+const cancelLeaveRequest = async (req: Request, res: Response) => {
+  try {
+    const { _id } = req.params;
+    const scope = await resolveReadScope(req.userId!);
+    const result = await leaveRequestServices.cancelLeaveRequest(_id as string, scope);
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.LEAVE_REQUEST_CANCELLED_SUCCESSFULLY, data: result });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
+
+const deleteLeaveRequest = async (req: Request, res: Response) => {
+  try {
+    const { _id } = req.params;
+    const scope = await resolveReadScope(req.userId!);
+    const deletedLeaveRequest = await leaveRequestServices.deleteLeaveRequest(_id as string, scope);
+    if (!deletedLeaveRequest) throw new AppError(MESSAGES.LEAVE_REQUEST_NOT_FOUND, StatusCode.NOT_FOUND);
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.LEAVE_REQUEST_DELETED_SUCCESSFULLY, data: deletedLeaveRequest });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
 export default {
   addLeaveRequest,
+  getAllLeaveRequest,
   getLeaveRequestById,
   getLeaveRequestsByEmployee,
   getLeaveRequestsByStatus,

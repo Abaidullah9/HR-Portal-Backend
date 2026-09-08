@@ -4,7 +4,7 @@ dotenv.config();
 
 const connectDB = async () => {
   try {
-    const mongoURI: string = process.env.MONGO_URI!;
+    const mongoURI: string = `${process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/HR-DB'}${process.env.MONGO_URI?.includes('?') ? '&' : '?'}retryWrites=false`;
     await mongoose.connect(mongoURI);
     console.log('MongoDB connected');
   } catch (error) {

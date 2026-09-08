@@ -1,88 +1,74 @@
-import Candidate from "../models/candidate.model";
-import { AppError, MongoFilter } from "../utils/helper/AppError";
-import { CreateCandidateDTO, UpdateCandidateDTO } from "../utils/dtos/candidate.dto";
-import { validateEmail } from "../utils/constants/validation.utils";
-import { getPagination, paginatedResult, PaginationQuery } from "../utils/pagination";
+import { StatusCode } from "../utils/helper/constants/enum";
+import { AppError } from "../utils/helper/AppError";
+import candidateModel from "../models/candidate.model";
+import { CreateCandidateDTO } from "../utils/dtos/candidate.dto";
+import { MESSAGES } from "../utils/helper/constants/messages";
+import { getPagination, paginatedResult, PaginationQuery } from "../utils/common";
+
 const addCandidate = async (candidateData: CreateCandidateDTO) => {
-  if (!candidateData.name || !candidateData.email || !candidateData.jobPostingId || !candidateData.source) {
-    throw new AppError("Missing required fields: name, email, jobPostingId, source", 400);
-  }
+  if (!candidateData) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const emailValidationError = validateEmail(candidateData.email);
-  if (emailValidationError) {
-    throw new AppError(emailValidationError, 400);
-  }
-
-  const candidate = await Candidate.create(candidateData);
-  return candidate;
+  const newCandidate = await candidateModel.create(candidateData);
+  return newCandidate;
 };
 
-const getAllCandidate = async (query?: PaginationQuery) => {
-  if (!query || (!query.page && !query.limit)) {
-    const candidates = await Candidate.find().populate("jobPostingId", "position");
-    return candidates;
-  }
+const getAllCandidate = async (query: PaginationQuery) => {
   const { page, limit, skip } = getPagination(query);
-  const [candidates, total] = await Promise.all([
-    Candidate.find().skip(skip).limit(limit).populate("jobPostingId", "position"),
-    Candidate.countDocuments(),
-  ]);
-  return paginatedResult(candidates, total, page, limit);
+  const allCandidates = await candidateModel.find().populate("jobPostingId", "position").skip(skip).limit(limit);
+  const total = await candidateModel.countDocuments();
+  return paginatedResult(allCandidates, total, page, limit);
 };
 
-const getCandidateById = async (candidateId: string) => {
-  const candidate = await Candidate.findById(candidateId).populate("jobPostingId", "position");
-  if (!candidate) {
-    throw new AppError("Candidate not found", 404);
-  }
-  return candidate;
+const getCandidateById = async (_id: string) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const candidateById = await candidateModel.findById(_id).populate("jobPostingId", "position");
+  if (!candidateById) throw new AppError(MESSAGES.CANDIDATE_NOT_FOUND, StatusCode.NOT_FOUND);
+  return candidateById;
 };
 
 const getCandidatesByJobPosting = async (jobPostingId: string) => {
-  const candidates = await Candidate.find({ jobPostingId }).sort({ appliedDate: -1 });
+  if (!jobPostingId) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const candidates = await candidateModel.find({ jobPostingId }).sort({ appliedDate: -1 });
+  if (!candidates) throw new AppError(MESSAGES.CANDIDATE_NOT_FOUND, StatusCode.NOT_FOUND);
   return candidates;
 };
 
 const getCandidatesByStatus = async (status: string) => {
-  const queryFilter: MongoFilter = { status };
-  const candidates = await Candidate.find(queryFilter).populate("jobPostingId", "position");
-  return candidates;
+  if (!status) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const filter: Record<string, unknown> = { status };
+  const candidates = await candidateModel.find(filter).populate("jobPostingId", "position");
+  if (!candidates) throw new AppError(MESSAGES.CANDIDATE_NOT_FOUND, StatusCode.NOT_FOUND);
+  return candidates; 
 };
 
-const updateCandidate = async (candidateId: string, updateData: UpdateCandidateDTO) => {
-  if (updateData.email) {
-    const emailValidationError = validateEmail(updateData.email);
-    if (emailValidationError) {
-      throw new AppError(emailValidationError, 400);
-    }
-  }
+const updateCandidate = async (_id: string, updateData: Partial<CreateCandidateDTO>) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const candidate = await Candidate.findByIdAndUpdate(candidateId, updateData, { new: true, runValidators: true });
-  if (!candidate) {
-    throw new AppError("Candidate not found", 404);
-  }
-  return candidate;
+  const updatedCandidate = await candidateModel.findByIdAndUpdate(_id, updateData, { returnDocument: 'after' });
+  if (!updatedCandidate) throw new AppError(MESSAGES.CANDIDATE_NOT_FOUND, StatusCode.NOT_FOUND);
+
+  return updatedCandidate;
 };
 
-const updateCandidateStatus = async (candidateId: string, status: string) => {
-  const validStatuses = ['applied', 'screening', 'interview', 'offered', 'hired', 'rejected'];
-  if (!validStatuses.includes(status)) {
-    throw new AppError("Invalid status", 400);
-  }
+const updateCandidateStatus = async (_id: string, status: string) => {
+  if (!_id || !status) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const candidate = await Candidate.findByIdAndUpdate(candidateId, { status }, { new: true });
-  if (!candidate) {
-    throw new AppError("Candidate not found", 404);
-  }
-  return candidate;
+  const updateFilter: Record<string, unknown> = { status };
+  const updatedCandidate = await candidateModel.findByIdAndUpdate(_id, updateFilter, { returnDocument: 'after' });
+  if (!updatedCandidate) throw new AppError(MESSAGES.CANDIDATE_NOT_FOUND, StatusCode.NOT_FOUND);
+
+  return updatedCandidate;
 };
 
-const deleteCandidate = async (candidateId: string) => {
-  const candidate = await Candidate.findByIdAndDelete(candidateId);
-  if (!candidate) {
-    throw new AppError("Candidate not found", 404);
-  }
-  return candidate;
+const deleteCandidate = async (_id: string) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const deletedCandidate = await candidateModel.findByIdAndDelete(_id);
+
+  return deletedCandidate;
 };
 
 export default {

@@ -1,135 +1,96 @@
-import Employee from "../models/employee.model";
+import { StatusCode } from "../utils/helper/constants/enum";
 import { AppError } from "../utils/helper/AppError";
-import { CreateEmployeeDTO, UpdateEmployeeDTO } from "../utils/dtos/employee.dto";
-import { getPagination, paginatedResult, PaginationQuery } from "../utils/pagination";
+import employeeModel from "../models/employee.model";
+import { CreateEmployeeDTO } from "../utils/dtos/employee.dto";
+import { MESSAGES } from "../utils/helper/constants/messages";
+import { getPagination, paginatedResult, PaginationQuery } from "../utils/common";
 
 const addEmployee = async (employeeData: CreateEmployeeDTO) => {
-  if (!employeeData.name || !employeeData.email || !employeeData.organizationId || 
-      !employeeData.userId || !employeeData.employeeCode || !employeeData.departmentId || 
-      !employeeData.position || !employeeData.employmentType || !employeeData.joiningDate) {
-    throw new AppError("Missing required fields", 400);
-  }
+  if (!employeeData) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  if (!/^\S+@\S+\.\S+$/.test(employeeData.email)) {
-    throw new AppError("Invalid email format", 400);
-  }
-
-  // Check for existing employee with same email or code
-  const existingEmail = await Employee.findOne({ email: employeeData.email });
-  if (existingEmail) {
-    throw new AppError("Employee with this email already exists", 409);
-  }
-
-  const existingCode = await Employee.findOne({ employeeCode: employeeData.employeeCode });
-  if (existingCode) {
-    throw new AppError("Employee with this code already exists", 409);
-  }
-
-  const employee = await Employee.create(employeeData);
-  return employee;
+  const newEmployee = await employeeModel.create(employeeData);
+  return newEmployee;
 };
 
-const getAllEmployee = async (query?: PaginationQuery) => {
-  if (!query || (!query.page && !query.limit)) {
-    const employees = await Employee.find()
-      .populate("userId", "name email")
-      .populate("departmentId", "name")
-      .populate("reportingManagerId", "name email");
-    return employees;
-  }
-
+const getAllEmployee = async (query: PaginationQuery) => {
   const { page, limit, skip } = getPagination(query);
-  const [employees, total] = await Promise.all([
-    Employee.find()
-      .skip(skip)
-      .limit(limit)
-      .populate("userId", "name email")
-      .populate("departmentId", "name")
-      .populate("reportingManagerId", "name email"),
-    Employee.countDocuments(),
-  ]);
-
-  return paginatedResult(employees, total, page, limit);
+  const allEmployees = await employeeModel.find()
+    .populate("userId", "name email")
+    .populate("departmentId", "name")
+    .populate("reportingManagerId", "name email")
+    .skip(skip)
+    .limit(limit);
+  const total = await employeeModel.countDocuments();
+  return paginatedResult(allEmployees, total, page, limit);
 };
 
-const getEmployeeById = async (employeeId: string) => {
-  const employee = await Employee.findById(employeeId)
+const getEmployeeById = async (_id: string) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const employeeById = await employeeModel.findById(_id)
     .populate("userId", "name email")
     .populate("departmentId", "name")
     .populate("reportingManagerId", "name email");
-  if (!employee) {
-    throw new AppError("Employee not found", 404);
-  }
-  return employee;
+  if (!employeeById) throw new AppError(MESSAGES.EMPLOYEE_NOT_FOUND, StatusCode.NOT_FOUND);
+  return employeeById;
 };
 
 const getEmployeeByUserId = async (userId: string) => {
-  const employee = await Employee.findOne({ userId })
+  if (!userId) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const employee = await employeeModel.findOne({ userId })
     .populate("departmentId", "name")
     .populate("reportingManagerId", "name email");
-  if (!employee) {
-    throw new AppError("Employee not found for this user", 404);
-  }
+  if (!employee) throw new AppError(MESSAGES.EMPLOYEE_NOT_FOUND, StatusCode.NOT_FOUND);
   return employee;
 };
 
 const getEmployeesByDepartment = async (departmentId: string) => {
-  const employees = await Employee.find({ departmentId })
+  if (!departmentId) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const employees = await employeeModel.find({ departmentId })
     .populate("userId", "name email")
     .populate("reportingManagerId", "name email");
+  if (!employees) throw new AppError(MESSAGES.EMPLOYEE_NOT_FOUND, StatusCode.NOT_FOUND);
   return employees;
 };
 
 const getEmployeesByReportingManager = async (managerId: string) => {
-  const employees = await Employee.find({ reportingManagerId: managerId })
+  if (!managerId) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const employees = await employeeModel.find({ reportingManagerId: managerId })
     .populate("userId", "name email")
     .populate("departmentId", "name");
+  if (!employees) throw new AppError(MESSAGES.EMPLOYEE_NOT_FOUND, StatusCode.NOT_FOUND);
   return employees;
 };
 
 const getActiveEmployees = async () => {
-  const employees = await Employee.find({ isActive: true })
+  const employees = await employeeModel.find({ isActive: true })
     .populate("userId", "name email")
     .populate("departmentId", "name");
+  if (!employees) throw new AppError(MESSAGES.EMPLOYEE_NOT_FOUND, StatusCode.NOT_FOUND);
   return employees;
 };
 
-const updateEmployee = async (employeeId: string, updateData: UpdateEmployeeDTO) => {
-  if (updateData.email && !/^\S+@\S+\.\S+$/.test(updateData.email)) {
-    throw new AppError("Invalid email format", 400);
-  }
+const updateEmployee = async (_id: string, updateData: Partial<CreateEmployeeDTO>) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  if (updateData.email) {
-    const existingEmail = await Employee.findOne({ email: updateData.email });
-    if (existingEmail && existingEmail._id.toString() !== employeeId) {
-      throw new AppError("Email already in use", 409);
-    }
-  }
-
-  const employee = await Employee.findByIdAndUpdate(employeeId, updateData, { new: true, runValidators: true })
+  const updatedEmployee = await employeeModel.findByIdAndUpdate(_id, updateData, { returnDocument: 'after' })
     .populate("userId", "name email")
     .populate("departmentId", "name")
     .populate("reportingManagerId", "name email");
-  if (!employee) {
-    throw new AppError("Employee not found", 404);
-  }
-  return employee;
+  if (!updatedEmployee) throw new AppError(MESSAGES.EMPLOYEE_NOT_FOUND, StatusCode.NOT_FOUND);
+
+  return updatedEmployee;
 };
 
-const updateEmployeeStatus = async (employeeId: string, isActive: boolean) => {
-  const employee = await Employee.findByIdAndUpdate(employeeId, { isActive }, { new: true });
-  if (!employee) {
-    throw new AppError("Employee not found", 404);
-  }
-  return employee;
-};
+const deleteEmployee = async (_id: string) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-const deleteEmployee = async (employeeId: string) => {
-  const employee = await Employee.findByIdAndDelete(employeeId);
-  if (!employee) {
-    throw new AppError("Employee not found", 404);
-  }
-  return employee;
+  const deletedEmployee = await employeeModel.findByIdAndDelete(_id);
+
+  return deletedEmployee;
 };
 
 export default {
@@ -141,6 +102,5 @@ export default {
   getEmployeesByReportingManager,
   getActiveEmployees,
   updateEmployee,
-  updateEmployeeStatus,
   deleteEmployee,
 };

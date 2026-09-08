@@ -17,6 +17,7 @@ export const MESSAGES = {
 
   // Attendance messages
   ATTENDANCE_ADDED_SUCCESSFULLY: "Attendance record added successfully",
+  ALL_ATTENDANCE_FETCHED_SUCCESSFULLY: "All attendance records fetched successfully",
   ATTENDANCE_FETCHED_SUCCESSFULLY: "Attendance record fetched successfully",
   ATTENDANCE_UPDATED_SUCCESSFULLY: "Attendance record updated successfully",
   ATTENDANCE_DELETED_SUCCESSFULLY: "Attendance record deleted successfully",
@@ -40,6 +41,7 @@ export const MESSAGES = {
 
   // Document messages
   DOCUMENT_ADDED_SUCCESSFULLY: "Document added successfully",
+  ALL_DOCUMENTS_FETCHED_SUCCESSFULLY: "All documents fetched successfully",
   DOCUMENT_FETCHED_SUCCESSFULLY: "Document fetched successfully",
   DOCUMENT_UPDATED_SUCCESSFULLY: "Document updated successfully",
   DOCUMENT_DELETED_SUCCESSFULLY: "Document deleted successfully",
@@ -55,6 +57,7 @@ export const MESSAGES = {
 
   // Payroll messages
   PAYROLL_ADDED_SUCCESSFULLY: "Payroll record added successfully",
+  ALL_PAYROLL_FETCHED_SUCCESSFULLY: "All payroll records fetched successfully",
   PAYROLL_FETCHED_SUCCESSFULLY: "Payroll record fetched successfully",
   PAYROLL_UPDATED_SUCCESSFULLY: "Payroll record updated successfully",
   PAYROLL_DELETED_SUCCESSFULLY: "Payroll record deleted successfully",
@@ -62,6 +65,7 @@ export const MESSAGES = {
 
   // Feedback messages
   FEEDBACK_ADDED_SUCCESSFULLY: "Feedback added successfully",
+  ALL_FEEDBACK_FETCHED_SUCCESSFULLY: "All feedback fetched successfully",
   FEEDBACK_FETCHED_SUCCESSFULLY: "Feedback fetched successfully",
   FEEDBACK_UPDATED_SUCCESSFULLY: "Feedback updated successfully",
   FEEDBACK_DELETED_SUCCESSFULLY: "Feedback deleted successfully",
@@ -69,6 +73,7 @@ export const MESSAGES = {
 
   // Interview messages
   INTERVIEW_ADDED_SUCCESSFULLY: "Interview scheduled successfully",
+  ALL_INTERVIEWS_FETCHED_SUCCESSFULLY: "All interviews fetched successfully",
   INTERVIEW_FETCHED_SUCCESSFULLY: "Interview fetched successfully",
   INTERVIEW_UPDATED_SUCCESSFULLY: "Interview updated successfully",
   INTERVIEW_DELETED_SUCCESSFULLY: "Interview deleted successfully",
@@ -84,6 +89,7 @@ export const MESSAGES = {
 
   // Leave Balance messages
   LEAVE_BALANCE_ADDED_SUCCESSFULLY: "Leave balance added successfully",
+  ALL_LEAVE_BALANCES_FETCHED_SUCCESSFULLY: "All leave balances fetched successfully",
   LEAVE_BALANCE_FETCHED_SUCCESSFULLY: "Leave balance fetched successfully",
   LEAVE_BALANCE_UPDATED_SUCCESSFULLY: "Leave balance updated successfully",
   LEAVE_BALANCE_DELETED_SUCCESSFULLY: "Leave balance deleted successfully",
@@ -92,6 +98,7 @@ export const MESSAGES = {
 
   // Leave Request messages
   LEAVE_REQUEST_ADDED_SUCCESSFULLY: "Leave request added successfully",
+  ALL_LEAVE_REQUESTS_FETCHED_SUCCESSFULLY: "All leave requests fetched successfully",
   LEAVE_REQUEST_FETCHED_SUCCESSFULLY: "Leave request fetched successfully",
   LEAVE_REQUEST_UPDATED_SUCCESSFULLY: "Leave request updated successfully",
   LEAVE_REQUEST_DELETED_SUCCESSFULLY: "Leave request deleted successfully",
@@ -147,6 +154,7 @@ export const MESSAGES = {
   // User messages
   USER_REGISTERED_SUCCESSFULLY: "User registered successfully",
   USER_LOGGED_IN_SUCCESSFULLY: "User logged in successfully",
+  USER_LOGGED_OUT_SUCCESSFULLY: "Logged out successfully",
   ALL_USERS_FETCHED_SUCCESSFULLY: "All users fetched successfully",
   USER_FETCHED_SUCCESSFULLY: "User fetched successfully",
   USER_UPDATED_SUCCESSFULLY: "User updated successfully",
@@ -158,6 +166,36 @@ export const MESSAGES = {
   ACCOUNT_DEACTIVATED: "Account is deactivated",
   EMAIL_ALREADY_EXISTS: "User with this email already exists",
 
+  // Auth & middleware messages
+  NOT_LOGGED_IN: "You are not logged in. Please log in to get access.",
+  USER_NO_LONGER_EXISTS: "The user belonging to this token no longer exists.",
+  INVALID_OR_EXPIRED_TOKEN: "Invalid or expired token.",
+  NOT_AUTHENTICATED: "Not authenticated",
+  ADMIN_ACCESS_REQUIRED: "Admin access required.",
+  NOT_AUTHORIZED: "Not authorized",
+
+  // Validation messages
+  CYCLE_ID_REQUIRED: "Cycle ID is required",
+  EMPLOYEE_ID_REQUIRED: "Employee ID is required",
+  DEPARTMENT_ID_REQUIRED: "Department ID is required",
+  FILE_REQUIRED: "File is required",
+  DATE_RANGE_REQUIRED: "startDate and endDate query parameters are required",
+  INVALID_DATE_FORMAT: "Invalid date format. Use YYYY-MM-DD",
+  INVALID_ID_FORMAT: "Invalid ID format. Please provide a valid identifier.",
+  DUPLICATE_VALUE: "Duplicate value. This record already exists.",
+  VALIDATION_FAILED: "Validation failed.",
+  VALIDATION_ERROR: "Validation Error",
+  FIELD_REQUIRED: "is required",
+  INVALID_LEAVE_STATUS: "Leave status must be 'approved' or 'rejected'",
+  REJECTION_REASON_REQUIRED: "Rejection reason is required when rejecting",
+
+  // Rate limit messages
+  RATE_LIMIT_EXCEEDED: "Too many requests, please try again later.",
+  LOGIN_ATTEMPTS_EXCEEDED: "Too many login attempts, please try again after 15 minutes",
+
+  // API root message
+  API_WORKING: "HR Portal API v1 - Working",
+
   // Generic messages
   MISSING_REQUIRED_FIELDS: "Missing required fields",
   INVALID_EMAIL_FORMAT: "Invalid email format",
@@ -165,4 +203,25 @@ export const MESSAGES = {
   INTERNAL_SERVER_ERROR: "Internal server error",
   CANCELLED: "Cancelled successfully",
   PASSWORD_MIN_LENGTH: "Password must be at least 6 characters",
+
+  // Creation failure messages
+  FAILED_TO_CREATE_ACTION: "Failed to create action",
+  FAILED_TO_CREATE_APPRAISAL: "Failed to create appraisal",
+  FAILED_TO_CREATE_ATTENDANCE: "Failed to create attendance",
+  FAILED_TO_CREATE_CANDIDATE: "Failed to create candidate",
+  FAILED_TO_CREATE_DEPARTMENT: "Failed to create department",
+  FAILED_TO_CREATE_DOCUMENT: "Failed to create document",
+  FAILED_TO_CREATE_EMPLOYEE: "Failed to create employee",
+  FAILED_TO_CREATE_PAYROLL: "Failed to create payroll",
+  FAILED_TO_CREATE_FEEDBACK: "Failed to create feedback",
+  FAILED_TO_CREATE_INTERVIEW: "Failed to create interview",
+  FAILED_TO_CREATE_JOB_POSTING: "Failed to create job posting",
+  FAILED_TO_CREATE_LEAVE_BALANCE: "Failed to create leave balance",
+  FAILED_TO_CREATE_LEAVE_REQUEST: "Failed to create leave request",
+  FAILED_TO_CREATE_ORGANIZATION_SETTINGS: "Failed to create or update organization settings",
+  FAILED_TO_CREATE_PERFORMANCE_CYCLE: "Failed to create performance cycle",
+  FAILED_TO_CREATE_REPORT: "Failed to create report",
+  FAILED_TO_CREATE_ROLE: "Failed to create role",
+  FAILED_TO_CREATE_TEAM: "Failed to create team",
+  FAILED_TO_CREATE_USER: "Failed to create user",
 };

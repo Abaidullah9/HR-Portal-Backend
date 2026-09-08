@@ -1,43 +1,74 @@
 import { Request, Response } from "express";
-import catchAsync from "../utils/helper/catchAsync";
+import { sendErrorResponse } from "../utils/helper/sendError";
 import roleServices from "../services/role.services";
 import { MESSAGES } from "../utils/helper/constants/messages";
 import { StatusCode } from "../utils/helper/constants/enum";
+import { AppError } from "../utils/helper/AppError";
+import { CreateRoleDTO, UpdateRoleDTO } from "../utils/dtos/role.dto";
+import { PaginationQuery } from "../utils/common";
 
-const addRole = catchAsync(async (req: Request, res: Response) => {
-  const result = await roleServices.addRole(req.body);
-  res.status(StatusCode.CREATED).json({ success: true, message: MESSAGES.ROLE_ADDED_SUCCESSFULLY, data: result });
-});
+const addRole = async (req: Request, res: Response) => {
+  try {
+    const body: CreateRoleDTO = req.body;
+    const newRole = await roleServices.addRole(body);
+    if (!newRole) throw new AppError(MESSAGES.FAILED_TO_CREATE_ROLE, StatusCode.INTERNAL_SERVER_ERROR);
+    res.status(StatusCode.CREATED).json({ success: true, message: MESSAGES.ROLE_ADDED_SUCCESSFULLY, data: newRole });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
-const getAllRole = catchAsync(async (req: Request, res: Response) => {
-  const result = await roleServices.getAllRole(req.query as any);
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ALL_ROLES_FETCHED_SUCCESSFULLY, data: result });
-});
+const getAllRole = async (req: Request, res: Response) => {
+  try {
+    const { data, pagination } = await roleServices.getAllRole(req.query as PaginationQuery);
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ALL_ROLES_FETCHED_SUCCESSFULLY, data, pagination });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
-const getRoleById = catchAsync(async (req: Request, res: Response) => {
-  const { _id } = req.params;
-  const result = await roleServices.getRoleById(_id as string);
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ROLE_FETCHED_SUCCESSFULLY, data: result });
-});
+const getRoleById = async (req: Request, res: Response) => {
+  try {
+    const { _id } = req.params;
+    const result = await roleServices.getRoleById(_id as string);
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ROLE_FETCHED_SUCCESSFULLY, data: result });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
-const updateRole = catchAsync(async (req: Request, res: Response) => {
-  const { _id } = req.params;
-  const result = await roleServices.updateRole(_id as string, req.body);
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ROLE_UPDATED_SUCCESSFULLY, data: result });
-});
+const updateRole = async (req: Request, res: Response) => {
+  try {
+    const { _id } = req.params;
+    const updateData: UpdateRoleDTO = req.body;
+    const result = await roleServices.updateRole(_id as string, updateData);
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ROLE_UPDATED_SUCCESSFULLY, data: result });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
-const assignActionsToRole = catchAsync(async (req: Request, res: Response) => {
-  const { _id } = req.params;
-  const { actionIds } = req.body;
-  const result = await roleServices.assignActionsToRole(_id as string, actionIds);
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ROLE_UPDATED_SUCCESSFULLY, data: result });
-});
+const assignActionsToRole = async (req: Request, res: Response) => {
+  try {
+    const { _id } = req.params;
+    const { actionIds }: { actionIds: string[] } = req.body;
+    const result = await roleServices.assignActionsToRole(_id as string, actionIds);
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ROLE_UPDATED_SUCCESSFULLY, data: result });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
-const deleteRole = catchAsync(async (req: Request, res: Response) => {
-  const { _id } = req.params;
-  await roleServices.deleteRole(_id as string);
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ROLE_DELETED_SUCCESSFULLY, data: null });
-});
+const deleteRole = async (req: Request, res: Response) => {
+  try {
+    const { _id } = req.params;
+    const deletedRole = await roleServices.deleteRole(_id as string);
+    if (!deletedRole) throw new AppError(MESSAGES.ROLE_NOT_FOUND, StatusCode.NOT_FOUND);
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ROLE_DELETED_SUCCESSFULLY, data: deletedRole });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
 export default {
   addRole,

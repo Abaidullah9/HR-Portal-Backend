@@ -5,11 +5,11 @@ import roleController from "../controllers/role.controller";
 
 const router = Router();
 
-router.get("/", roleController.getAllRole);
-router.get("/:_id", roleController.getRoleById);
-router.post("/", isAuthenticated, authorize("Role", "create"), roleController.addRole);
-router.patch("/:_id", isAuthenticated, authorize("Role", "update"), roleController.updateRole);
-router.patch("/:_id/actions", isAuthenticated, authorize("Role", "assignActions"), roleController.assignActionsToRole);
-router.delete("/:_id", isAuthenticated, authorize("Role", "delete"), roleController.deleteRole);
+router.get("/paginated", isAuthenticated, authorize("read_Role"), roleController.getAllRole);
+router.get("/:_id", isAuthenticated, authorize("read_Role"), roleController.getRoleById);
+router.post("/", isAuthenticated, authorize("create_Role"), roleController.addRole);
+router.patch("/:_id/actions", isAuthenticated, authorize("assignActions_Role"), roleController.assignActionsToRole);
+router.patch("/:_id", isAuthenticated, authorize("update_Role"), roleController.updateRole);
+router.delete("/:_id", isAuthenticated, authorize("delete_Role"), roleController.deleteRole);
 
 export default router;

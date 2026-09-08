@@ -1,74 +1,80 @@
-import Feedback from "../models/feedback.model";
+import { StatusCode } from "../utils/helper/constants/enum";
 import { AppError } from "../utils/helper/AppError";
-import { CreateFeedbackDTO, UpdateFeedbackDTO } from "../utils/dtos/feedback.dto";
+import feedbackModel from "../models/feedback.model";
+import { CreateFeedbackDTO } from "../utils/dtos/feedback.dto";
+import { MESSAGES } from "../utils/helper/constants/messages";
+import { getPagination, paginatedResult, PaginationQuery } from "../utils/common";
 
 const addFeedback = async (feedbackData: CreateFeedbackDTO) => {
-  if (!feedbackData.targetEmployeeId || !feedbackData.reviewerId || !feedbackData.relationship || !feedbackData.comment) {
-    throw new AppError("Missing required fields: targetEmployeeId, reviewerId, relationship, comment", 400);
-  }
+  if (!feedbackData) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const feedback = await Feedback.create(feedbackData);
-  return feedback;
+  const newFeedback = await feedbackModel.create(feedbackData);
+  return newFeedback;
 };
 
-const getFeedbackByTargetEmployee = async (employeeId: string) => {
-  const feedbacks = await Feedback.find({ targetEmployeeId: employeeId })
-    .populate("reviewerId", "name email")
-    .populate("cycleId", "name")
-    .sort({ date: -1 });
-  return feedbacks;
+const getAllFeedback = async (query: PaginationQuery) => {
+  const { page, limit, skip } = getPagination(query);
+  const allFeedback = await feedbackModel.find().populate("targetEmployeeId", "name email employeeCode").populate("reviewerId", "name email employeeCode").populate("cycleId", "name status").skip(skip).limit(limit);
+  const total = await feedbackModel.countDocuments();
+  return paginatedResult(allFeedback, total, page, limit);
+};
+
+const getFeedbackById = async (_id: string) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const feedbackById = await feedbackModel.findById(_id).populate("targetEmployeeId", "name email employeeCode").populate("reviewerId", "name email employeeCode").populate("cycleId", "name status");
+  if (!feedbackById) throw new AppError(MESSAGES.FEEDBACK_NOT_FOUND, StatusCode.NOT_FOUND);
+  return feedbackById;
+};
+
+const getFeedbackByTargetEmployee = async (targetEmployeeId: string) => {
+  if (!targetEmployeeId) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const feedback = await feedbackModel.find({ targetEmployeeId }).populate("targetEmployeeId", "name email employeeCode").populate("reviewerId", "name email employeeCode").populate("cycleId", "name status");
+  if (!feedback) throw new AppError(MESSAGES.FEEDBACK_NOT_FOUND, StatusCode.NOT_FOUND);
+  return feedback;
 };
 
 const getFeedbackByReviewer = async (reviewerId: string) => {
-  const feedbacks = await Feedback.find({ reviewerId })
-    .populate("targetEmployeeId", "name email")
-    .populate("cycleId", "name")
-    .sort({ date: -1 });
-  return feedbacks;
+  if (!reviewerId) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const feedback = await feedbackModel.find({ reviewerId }).populate("targetEmployeeId", "name email employeeCode").populate("reviewerId", "name email employeeCode").populate("cycleId", "name status");
+  if (!feedback) throw new AppError(MESSAGES.FEEDBACK_NOT_FOUND, StatusCode.NOT_FOUND);
+  return feedback;
 };
 
 const getFeedbackByCycle = async (cycleId: string) => {
-  const feedbacks = await Feedback.find({ cycleId })
-    .populate("targetEmployeeId", "name email")
-    .populate("reviewerId", "name email");
-  return feedbacks;
-};
+  if (!cycleId) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-const getFeedbackById = async (feedbackId: string) => {
-  const feedback = await Feedback.findById(feedbackId)
-    .populate("targetEmployeeId", "name email")
-    .populate("reviewerId", "name email")
-    .populate("cycleId", "name");
-  if (!feedback) {
-    throw new AppError("Feedback not found", 404);
-  }
+  const feedback = await feedbackModel.find({ cycleId }).populate("targetEmployeeId", "name email employeeCode").populate("reviewerId", "name email employeeCode").populate("cycleId", "name status");
+  if (!feedback) throw new AppError(MESSAGES.FEEDBACK_NOT_FOUND, StatusCode.NOT_FOUND);
   return feedback;
 };
 
-const updateFeedback = async (feedbackId: string, updateData: UpdateFeedbackDTO) => {
-  const feedback = await Feedback.findByIdAndUpdate(feedbackId, updateData, { new: true, runValidators: true })
-    .populate("targetEmployeeId", "name email")
-    .populate("reviewerId", "name email");
-  if (!feedback) {
-    throw new AppError("Feedback not found", 404);
-  }
-  return feedback;
+const updateFeedback = async (_id: string, updateData: Partial<CreateFeedbackDTO>) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const updatedFeedback = await feedbackModel.findByIdAndUpdate(_id, updateData, { returnDocument: 'after' }).populate("targetEmployeeId", "name email employeeCode").populate("reviewerId", "name email employeeCode").populate("cycleId", "name status");
+  if (!updatedFeedback) throw new AppError(MESSAGES.FEEDBACK_NOT_FOUND, StatusCode.NOT_FOUND);
+
+  return updatedFeedback;
 };
 
-const deleteFeedback = async (feedbackId: string) => {
-  const feedback = await Feedback.findByIdAndDelete(feedbackId);
-  if (!feedback) {
-    throw new AppError("Feedback not found", 404);
-  }
-  return feedback;
+const deleteFeedback = async (_id: string) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const deletedFeedback = await feedbackModel.findByIdAndDelete(_id);
+
+  return deletedFeedback;
 };
 
 export default {
   addFeedback,
+  getAllFeedback,
+  getFeedbackById,
   getFeedbackByTargetEmployee,
   getFeedbackByReviewer,
   getFeedbackByCycle,
-  getFeedbackById,
   updateFeedback,
   deleteFeedback,
 };

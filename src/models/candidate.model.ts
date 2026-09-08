@@ -19,7 +19,7 @@ const candidateSchema = new Schema<ICandidate>({
   source: { type: String, required: true },
   appliedDate: { type: Date, required: true, default: Date.now, index: true },
   status: { type: String, enum: ['applied', 'screening', 'interview', 'offered', 'hired', 'rejected'], default: 'applied', index: true },
-  resume: { type: String }, // URL or file path
+  resume: { type: String },
   notes: { type: String, trim: true }
 }, { timestamps: true });
 export default mongoose.model<ICandidate>('Candidate', candidateSchema);

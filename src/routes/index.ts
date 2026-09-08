@@ -1,4 +1,6 @@
 import { Router } from "express";
+import mongoose from "mongoose";
+import { MESSAGES } from "../utils/helper/constants/messages";
 import actionRoutes from "./action.routes";
 import appraisalRoutes from "./appraisal.routes";
 import attendanceRoutes from "./attendance.routes";
@@ -22,7 +24,24 @@ import userRoutes from "./user.routes";
 const router = Router();
 
 router.get("/", (_req, res) => {
-  res.json({ success: true, message: "HR Portal API v1 - Working" });
+  res.json({ success: true, message: MESSAGES.API_WORKING });
+});
+
+router.get("/health", (_req, res) => {
+  const dbStatus = mongoose.connection.readyState;
+  const isDbConnected = dbStatus === 1;
+  res.status(isDbConnected ? 200 : 503).json({
+    success: isDbConnected,
+    message: isDbConnected ? "Server is healthy" : "Database disconnected",
+    data: {
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString(),
+      database: {
+        connected: isDbConnected,
+        readyState: dbStatus,
+      },
+    },
+  });
 });
 
 router.use("/actions", actionRoutes);

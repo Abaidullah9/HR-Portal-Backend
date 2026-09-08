@@ -1,54 +1,47 @@
-import OrganizationSetting from "../models/organizationSetting.model";
+import { StatusCode } from "../utils/helper/constants/enum";
 import { AppError } from "../utils/helper/AppError";
-import { CreateOrganizationSettingDTO, UpdateOrganizationSettingDTO } from "../utils/dtos/organizationSetting.dto";
-
-const createOrUpdateOrganization = async (orgData: CreateOrganizationSettingDTO) => {
-  if (!orgData.organizationName || !orgData.email) {
-    throw new AppError("Missing required fields: organizationName, email", 400);
-  }
-
-  // Check if organization settings already exist (singleton pattern)
-  const existingOrg = await OrganizationSetting.findOne();
-  if (existingOrg) {
-    // Update existing
-    const updated = await OrganizationSetting.findByIdAndUpdate(existingOrg._id, orgData, { new: true, runValidators: true });
-    return updated;
-  }
-
-  // Create new
-  const organization = await OrganizationSetting.create(orgData);
-  return organization;
-};
+import organizationSettingModel from "../models/organizationSetting.model";
+import { CreateOrganizationSettingDTO } from "../utils/dtos/organizationSetting.dto";
+import { MESSAGES } from "../utils/helper/constants/messages";
 
 const getOrganizationSettings = async () => {
-  const org = await OrganizationSetting.findOne();
-  if (!org) {
-    throw new AppError("Organization settings not found", 404);
-  }
-  return org;
+  const settings = await organizationSettingModel.findOne();
+  if (!settings) throw new AppError(MESSAGES.ORGANIZATION_SETTINGS_NOT_FOUND, StatusCode.NOT_FOUND);
+  return settings;
 };
 
-const updateOrganizationSettings = async (updateData: UpdateOrganizationSettingDTO) => {
-  const org = await OrganizationSetting.findOne();
-  if (!org) {
-    throw new AppError("Organization settings not found. Please create settings first.", 404);
-  }
+const createOrUpdateOrganization = async (settingsData: CreateOrganizationSettingDTO) => {
+  if (!settingsData) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const updated = await OrganizationSetting.findByIdAndUpdate(org._id, updateData, { new: true, runValidators: true });
-  return updated;
+  const settings = await organizationSettingModel.findOneAndUpdate(
+    {},
+    settingsData,
+    { upsert: true, returnDocument: 'after' }
+  );
+  return settings;
+};
+
+const updateOrganizationSettings = async (updateData: Partial<CreateOrganizationSettingDTO>) => {
+  if (!updateData) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const settings = await organizationSettingModel.findOneAndUpdate(
+    {},
+    updateData,
+    { returnDocument: 'after' }
+  );
+  if (!settings) throw new AppError(MESSAGES.ORGANIZATION_SETTINGS_NOT_FOUND, StatusCode.NOT_FOUND);
+  return settings;
 };
 
 const deleteOrganizationSettings = async () => {
-  const org = await OrganizationSetting.findOneAndDelete();
-  if (!org) {
-    throw new AppError("Organization settings not found", 404);
-  }
-  return org;
+  const settings = await organizationSettingModel.findOneAndDelete({});
+  if (!settings) throw new AppError(MESSAGES.ORGANIZATION_SETTINGS_NOT_FOUND, StatusCode.NOT_FOUND);
+  return settings;
 };
 
 export default {
-  createOrUpdateOrganization,
   getOrganizationSettings,
+  createOrUpdateOrganization,
   updateOrganizationSettings,
   deleteOrganizationSettings,
 };

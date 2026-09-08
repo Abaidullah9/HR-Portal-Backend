@@ -1,159 +1,119 @@
-import User from "../models/user.model";
+import { StatusCode } from "../utils/helper/constants/enum";
 import { AppError } from "../utils/helper/AppError";
-import { CreateUserDTO, UpdateUserDTO } from "../utils/dtos/user.dto";
-import { validateEmail, validatePasswordLength, validateRequiredString } from "../utils/constants/validation.utils";
+import userModel from "../models/user.model";
+import { CreateUserDTO } from "../utils/dtos/user.dto";
+import { MESSAGES } from "../utils/helper/constants/messages";
 import bcrypt from "bcryptjs";
-import { getPagination, paginatedResult, PaginationQuery } from "../utils/pagination";
-
-const getUserById = async (userId: string) => {
-  const user = await User.findById(userId).select("-password");
-  if (!user) {
-    throw new AppError("User not found", 404);
-  }
-  return user;
-};
+import { generateToken } from "../utils/helper/helper.functions";
+import { getPagination, paginatedResult, PaginationQuery } from "../utils/common";
 
 const registerUser = async (userData: CreateUserDTO) => {
-  const missingFieldsError = !userData.name || !userData.email || !userData.password || !userData.roleId;
-  if (missingFieldsError) {
-    throw new AppError("Missing required fields: name, email, password, roleId", 400);
-  }
+  if (!userData) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const emailError = validateEmail(userData.email);
-  if (emailError) {
-    throw new AppError(emailError, 400);
-  }
-
-  const passwordError = validatePasswordLength(userData.password);
-  if (passwordError) {
-    throw new AppError(passwordError, 400);
-  }
-
-  const existingUser = await User.findOne({ email: userData.email });
-  if (existingUser) {
-    throw new AppError("User with this email already exists", 409);
-  }
+  const existingUser = await userModel.findOne({ email: userData.email });
+  if (existingUser) throw new AppError(MESSAGES.EMAIL_ALREADY_EXISTS, StatusCode.CONFLICT);
 
   const hashedPassword = await bcrypt.hash(userData.password, 10);
   const userToCreate = { ...userData, password: hashedPassword };
-  
-  const newUser = await User.create(userToCreate);
 
-  const userResponse = newUser.toObject();
-  const { password: _, ...safeUserResponse } = userResponse;
-  return safeUserResponse;
+  const newUser = await userModel.create(userToCreate);
+  const new_user = newUser.toObject();
+  const { password: _, ...newuser } = new_user;
+  const token = generateToken(newUser._id.toString());
+
+  return { user: newuser, token };
 };
 
-
 const loginUser = async (email: string, password: string) => {
-  if (!email || !password) {
-    throw new AppError("Email and password are required", 400);
-  }
+  if (!email || !password) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const user = await User.findOne({ email }).select("+password");
-  if (!user) {
-    throw new AppError("Invalid email or password", 401);
-  }
+  const user = await userModel.findOne({ email }).select("+password");
+  if (!user) throw new AppError(MESSAGES.INVALID_CREDENTIALS, StatusCode.UNAUTHORIZED);
 
   const isMatch = await bcrypt.compare(password, user.password);
-  if (!isMatch) {
-    throw new AppError("Invalid email or password", 401);
-  }
+  if (!isMatch) throw new AppError(MESSAGES.INVALID_CREDENTIALS, StatusCode.UNAUTHORIZED);
 
-  if (!user.isActive) {
-    throw new AppError("Account is deactivated", 403);
-  }
+  if (!user.isActive) throw new AppError(MESSAGES.ACCOUNT_DEACTIVATED, StatusCode.FORBIDDEN);
 
   user.lastLogin = new Date();
   await user.save();
 
-  const { password: _, ...userResponse } = user.toObject();
-  return userResponse;
+  const user_obj = user.toObject();
+  const { password: _, ...userData } = user_obj;
+  const token = generateToken(user._id.toString());
+
+  return { user: userData, token };
 };
 
-const updateUser = async (userId: string, updateData: UpdateUserDTO) => {
-  if (updateData.email) {
-    const emailError = validateEmail(updateData.email);
-    if (emailError) {
-      throw new AppError(emailError, 400);
-    }
-  }
-
-  if (updateData.name) {
-    const nameError = validateRequiredString(updateData.name, "Name");
-    if (nameError) {
-      throw new AppError(nameError, 400);
-    }
-  }
-
-  // Build mutable update payload to avoid mutating the input DTO
-  const updatePayload: Record<string, any> = { ...updateData };
-
-  if (updatePayload.password) {
-    const passwordError = validatePasswordLength(updatePayload.password);
-    if (passwordError) {
-      throw new AppError(passwordError, 400);
-    }
-    updatePayload.password = await bcrypt.hash(updatePayload.password, 10);
-  }
-
-  if (updatePayload.email) {
-    const existingUser = await User.findOne({ email: updatePayload.email });
-    if (existingUser && existingUser._id.toString() !== userId) {
-      throw new AppError("Email already in use", 409);
-    }
-  }
-
-  const user = await User.findByIdAndUpdate(userId, updatePayload, { new: true, runValidators: true }).select("-password");
-  if (!user) {
-    throw new AppError("User not found", 404);
-  }
-
-  return user;
-};
-
-const deleteUser = async (userId: string) => {
-  const user = await User.findByIdAndDelete(userId);
-  if (!user) {
-    throw new AppError("User not found", 404);
-  }
-  return user;
-};
-
-const getAllUser = async (query?: PaginationQuery) => {
-  if (!query || (!query.page && !query.limit)) {
-    const users = await User.find().select("-password");
-    return users;
-  }
+const getAllUser = async (query: PaginationQuery) => {
   const { page, limit, skip } = getPagination(query);
-  const [users, total] = await Promise.all([
-    User.find().skip(skip).limit(limit).select("-password"),
-    User.countDocuments(),
-  ]);
-  return paginatedResult(users, total, page, limit);
+  const allUsers = await userModel.find().select("-password").populate("roleId", "roleName").skip(skip).limit(limit);
+  const total = await userModel.countDocuments();
+  if (!allUsers) throw new AppError(MESSAGES.USER_NOT_FOUND, StatusCode.NOT_FOUND);
+  return paginatedResult(allUsers, total, page, limit);
 };
 
-const updateUserStatus = async (userId: string, isActive: boolean) => {
-  const user = await User.findByIdAndUpdate(userId, { isActive }, { new: true }).select("-password");
-  if (!user) {
-    throw new AppError("User not found", 404);
-  }
-  return user;
+const getUserById = async (_id: string) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const userById = await userModel.findById(_id).select("-password").populate("roleId", "roleName");
+  if (!userById) throw new AppError(MESSAGES.USER_NOT_FOUND, StatusCode.NOT_FOUND);
+  return userById;
 };
-const updateUserRole = async (userId: string, roleId: string) => {
-  const user = await User.findByIdAndUpdate(userId, { roleId }, { new: true }).select("-password");
-  if (!user) {
-    throw new AppError("User not found", 404);
+
+const updateUser = async (_id: string, updateData: Partial<CreateUserDTO>) => {
+  if (!_id || !updateData) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  if (updateData.email) {
+    const existingUser = await userModel.findOne({ email: updateData.email });
+    if (existingUser && existingUser._id.toString() !== _id) {
+      throw new AppError(MESSAGES.EMAIL_ALREADY_EXISTS, StatusCode.CONFLICT);
+    }
   }
-    return user;
-}
+  const updatedUserData = {
+    ...updateData,
+    ...(updateData.password ? { password: await bcrypt.hash(updateData.password, 10) } : {}),
+  };
+
+  const updatedUser = await userModel.findByIdAndUpdate(_id, updatedUserData, { returnDocument: 'after' }).select("-password").populate("roleId", "roleName");
+  if (!updatedUser) throw new AppError(MESSAGES.USER_NOT_FOUND, StatusCode.NOT_FOUND);
+
+  return updatedUser;
+};
+
+const deleteUser = async (_id: string) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const deletedUser = await userModel.findByIdAndDelete(_id).select("-password");
+
+  return deletedUser;
+};
+
+const updateUserStatus = async (_id: string, isActive: boolean) => {
+  if (!_id || isActive === undefined) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const updatedUser = await userModel.findByIdAndUpdate(_id, { isActive }, { returnDocument: 'after' }).select("-password").populate("roleId", "roleName");
+  if (!updatedUser) throw new AppError(MESSAGES.USER_NOT_FOUND, StatusCode.NOT_FOUND);
+
+  return updatedUser;
+};
+
+const updateUserRole = async (_id: string, roleId: string) => {
+  if (!_id || !roleId) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const updatedUser = await userModel.findByIdAndUpdate(_id, { roleId }, { returnDocument: 'after' }).select("-password").populate("roleId", "roleName");
+  if (!updatedUser) throw new AppError(MESSAGES.USER_NOT_FOUND, StatusCode.NOT_FOUND);
+
+  return updatedUser;
+};
+
 export default {
-  getUserById,
   registerUser,
   loginUser,
+  getAllUser,
+  getUserById,
   updateUser,
   deleteUser,
-  getAllUser,
   updateUserStatus,
   updateUserRole,
 };

@@ -11,20 +11,7 @@ const startServer = async () => {
     await connectDB();
     const server = app.listen(PORT, () => {
       console.log(`[Server] Running on http://localhost:${PORT}`);
-      console.log(`[Server] Health check at http://localhost:${PORT}/health`);
     });
-
-    // Graceful shutdown
-    const gracefulShutdown = (signal: string) => {
-      console.log(`[Server] Received ${signal}. Shutting down gracefully...`);
-      server.close(() => {
-        console.log("[Server] HTTP server closed.");
-        process.exit(0);
-      });
-    };
-
-    process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
-    process.on("SIGINT", () => gracefulShutdown("SIGINT"));
   } catch (error) {
     console.error("[Server] Failed to start:", error);
     process.exit(1);

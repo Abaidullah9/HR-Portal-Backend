@@ -1,65 +1,62 @@
-import Report from "../models/report.model";
+import { StatusCode } from "../utils/helper/constants/enum";
 import { AppError } from "../utils/helper/AppError";
-import { CreateReportDTO, UpdateReportDTO } from "../utils/dtos/report.dto";
-import { getPagination, paginatedResult, PaginationQuery } from "../utils/pagination";
+import reportModel from "../models/report.model";
+import { CreateReportDTO } from "../utils/dtos/report.dto";
+import { MESSAGES } from "../utils/helper/constants/messages";
+import { getPagination, paginatedResult, PaginationQuery } from "../utils/common";
 
 const addReport = async (reportData: CreateReportDTO) => {
-  if (!reportData.reportName || !reportData.category || !reportData.generatedBy) {
-    throw new AppError("Missing required fields: reportName, category, generatedBy", 400);
-  }
+  if (!reportData) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const report = await Report.create(reportData);
-  return report;
+  const newReport = await reportModel.create(reportData);
+  return newReport;
 };
 
-const getAllReport = async (query?: PaginationQuery) => {
-  if (!query || (!query.page && !query.limit)) {
-    const reports = await Report.find()
-      .populate("generatedBy", "name email")
-      .sort({ lastGenerated: -1 });
-    return reports;
-  }
+const getAllReport = async (query: PaginationQuery) => {
   const { page, limit, skip } = getPagination(query);
-  const [reports, total] = await Promise.all([
-    Report.find().skip(skip).limit(limit)
-      .populate("generatedBy", "name email")
-      .sort({ lastGenerated: -1 }),
-    Report.countDocuments(),
-  ]);
-  return paginatedResult(reports, total, page, limit);
+  const allReports = await reportModel.find()
+    .populate("generatedBy", "name email")
+    .skip(skip)
+    .limit(limit);
+  const total = await reportModel.countDocuments();
+  if (!allReports) throw new AppError(MESSAGES.REPORT_NOT_FOUND, StatusCode.NOT_FOUND);
+  return paginatedResult(allReports, total, page, limit);
 };
 
-const getReportById = async (reportId: string) => {
-  const report = await Report.findById(reportId)
-    .populate("generatedBy", "name email");
-  if (!report) {
-    throw new AppError("Report not found", 404);
-  }
-  return report;
+const getReportById = async (_id: string) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const reportById = await reportModel.findById(_id).populate("generatedBy", "name email");
+  if (!reportById) throw new AppError(MESSAGES.REPORT_NOT_FOUND, StatusCode.NOT_FOUND);
+  return reportById;
 };
 
 const getReportsByCategory = async (category: string) => {
-  const reports = await Report.find({ category })
+  if (!category) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const reports = await reportModel.find({ category })
     .populate("generatedBy", "name email")
     .sort({ lastGenerated: -1 });
+    if (!reports) throw new AppError(MESSAGES.REPORT_NOT_FOUND, StatusCode.NOT_FOUND);
   return reports;
 };
 
-const updateReport = async (reportId: string, updateData: UpdateReportDTO) => {
-  const report = await Report.findByIdAndUpdate(reportId, updateData, { new: true, runValidators: true })
+const updateReport = async (_id: string, updateData: Partial<CreateReportDTO>) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const updatedReport = await reportModel.findByIdAndUpdate(_id, updateData, { returnDocument: 'after' })
     .populate("generatedBy", "name email");
-  if (!report) {
-    throw new AppError("Report not found", 404);
-  }
-  return report;
+  if (!updatedReport) throw new AppError(MESSAGES.REPORT_NOT_FOUND, StatusCode.NOT_FOUND);
+
+  return updatedReport;
 };
 
-const deleteReport = async (reportId: string) => {
-  const report = await Report.findByIdAndDelete(reportId);
-  if (!report) {
-    throw new AppError("Report not found", 404);
-  }
-  return report;
+const deleteReport = async (_id: string) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const deletedReport = await reportModel.findByIdAndDelete(_id);
+
+  return deletedReport;
 };
 
 export default {

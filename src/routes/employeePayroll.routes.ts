@@ -5,13 +5,14 @@ import employeePayrollController from "../controllers/employeePayroll.controller
 
 const router = Router();
 
-router.get("/employee/:employeeId", employeePayrollController.getPayrollByEmployee);
-router.get("/pay-period", employeePayrollController.getPayrollByPayPeriod);
-router.get("/status/:status", employeePayrollController.getPayrollByStatus);
-router.get("/:_id", employeePayrollController.getPayrollById);
-router.post("/", isAuthenticated, authorize("Payroll", "create"), employeePayrollController.addPayroll);
-router.patch("/:_id", isAuthenticated, authorize("Payroll", "update"), employeePayrollController.updatePayroll);
-router.patch("/:_id/status", isAuthenticated, authorize("Payroll", "updateStatus"), employeePayrollController.updatePayrollStatus);
-router.delete("/:_id", isAuthenticated, authorize("Payroll", "delete"), employeePayrollController.deletePayroll);
+router.get("/paginated", isAuthenticated, authorize("read_Payroll"), employeePayrollController.getAllPayroll);
+router.get("/employee/:employeeId", isAuthenticated, authorize("read_Payroll"), employeePayrollController.getPayrollByEmployee);
+router.get("/pay-period", isAuthenticated, authorize("read_Payroll"), employeePayrollController.getPayrollByPayPeriod);
+router.get("/status/:status", isAuthenticated, authorize("read_Payroll"), employeePayrollController.getPayrollByStatus);
+router.get("/:_id", isAuthenticated, authorize("read_Payroll"), employeePayrollController.getPayrollById);
+router.post("/", isAuthenticated, authorize("create_Payroll"), employeePayrollController.addPayroll);
+router.patch("/:_id/status", isAuthenticated, authorize("update_PayrollStatus"), employeePayrollController.updatePayrollStatus);
+router.patch("/:_id", isAuthenticated, authorize("update_Payroll"), employeePayrollController.updatePayroll);
+router.delete("/:_id", isAuthenticated, authorize("delete_Payroll"), employeePayrollController.deletePayroll);
 
 export default router;

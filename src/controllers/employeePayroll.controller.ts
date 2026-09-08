@@ -1,62 +1,123 @@
 import { Request, Response } from "express";
-import catchAsync from "../utils/helper/catchAsync";
+import { sendErrorResponse } from "../utils/helper/sendError";
 import employeePayrollServices from "../services/employeePayroll.services";
 import { MESSAGES } from "../utils/helper/constants/messages";
 import { StatusCode } from "../utils/helper/constants/enum";
+import { AppError } from "../utils/helper/AppError";
+import { CreatePayrollDTO, UpdatePayrollDTO } from "../utils/dtos/employeePayroll.dto";
+import { PaginationQuery } from "../utils/common";
 
-const addPayroll = catchAsync(async (req: Request, res: Response) => {
-  const result = await employeePayrollServices.addPayroll(req.body);
-  res.status(StatusCode.CREATED).json({ success: true, message: MESSAGES.PAYROLL_ADDED_SUCCESSFULLY, data: result });
-});
+const addPayroll = async (req: Request, res: Response) => {
+  try {
+    const body: CreatePayrollDTO = req.body;
+    const newPayroll = await employeePayrollServices.addPayroll(body);
+    if (!newPayroll) throw new AppError(MESSAGES.FAILED_TO_CREATE_PAYROLL, StatusCode.INTERNAL_SERVER_ERROR);
+    res.status(StatusCode.CREATED).json({ success: true, message: MESSAGES.PAYROLL_ADDED_SUCCESSFULLY, data: newPayroll });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
-const getPayrollById = catchAsync(async (req: Request, res: Response) => {
-  const { _id } = req.params;
-  const result = await employeePayrollServices.getPayrollById(_id as string);
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.PAYROLL_FETCHED_SUCCESSFULLY, data: result });
-});
+const getAllPayroll = async (req: Request, res: Response) => {
+  try {
+    const { data, pagination } = await employeePayrollServices.getAllPayroll(req.query as PaginationQuery);
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ALL_PAYROLL_FETCHED_SUCCESSFULLY, data, pagination });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
-const getPayrollByEmployee = catchAsync(async (req: Request, res: Response) => {
-  const { employeeId } = req.params;
-  const result = await employeePayrollServices.getPayrollByEmployee(employeeId as string);
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.PAYROLL_FETCHED_SUCCESSFULLY, data: result });
-});
+const getPayrollById = async (req: Request, res: Response) => {
+  try {
+    const { _id } = req.params;
+    const result = await employeePayrollServices.getPayrollById(_id as string);
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.PAYROLL_FETCHED_SUCCESSFULLY, data: result });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
-const getPayrollByPayPeriod = catchAsync(async (req: Request, res: Response) => {
-  const { startDate, endDate } = req.query;
-  const result = await employeePayrollServices.getPayrollByPayPeriod(
-    new Date(startDate as string),
-    new Date(endDate as string)
-  );
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.PAYROLL_FETCHED_SUCCESSFULLY, data: result });
-});
+const getPayrollByEmployee = async (req: Request, res: Response) => {
+  try {
+    const { employeeId } = req.params;
+    const result = await employeePayrollServices.getPayrollByEmployee(employeeId as string);
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.PAYROLL_FETCHED_SUCCESSFULLY, data: result });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
-const getPayrollByStatus = catchAsync(async (req: Request, res: Response) => {
-  const { status } = req.params;
-  const result = await employeePayrollServices.getPayrollByStatus(status as string);
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.PAYROLL_FETCHED_SUCCESSFULLY, data: result });
-});
+const getPayrollByPayPeriod = async (req: Request, res: Response) => {
+  try {
+    const { startDate, endDate }: { startDate?: string; endDate?: string } = req.query;
+  
+    if (!startDate || !endDate) {
+      throw new AppError(MESSAGES.DATE_RANGE_REQUIRED, StatusCode.BAD_REQUEST);
+    }
+  
+    const parsedStart = new Date(startDate);
+    const parsedEnd = new Date(endDate);
+  
+    if (isNaN(parsedStart.getTime()) || isNaN(parsedEnd.getTime())) {
+      throw new AppError(MESSAGES.INVALID_DATE_FORMAT, StatusCode.BAD_REQUEST);
+    }
+  
+    const result = await employeePayrollServices.getPayrollByPayPeriod(
+      parsedStart,
+      parsedEnd
+    );
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.PAYROLL_FETCHED_SUCCESSFULLY, data: result });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
-const updatePayroll = catchAsync(async (req: Request, res: Response) => {
-  const { _id } = req.params;
-  const result = await employeePayrollServices.updatePayroll(_id as string, req.body);
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.PAYROLL_UPDATED_SUCCESSFULLY, data: result });
-});
+const getPayrollByStatus = async (req: Request, res: Response) => {
+  try {
+    const { status } = req.params;
+    const result = await employeePayrollServices.getPayrollByStatus(status as string);
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.PAYROLL_FETCHED_SUCCESSFULLY, data: result });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
-const updatePayrollStatus = catchAsync(async (req: Request, res: Response) => {
-  const { _id } = req.params;
-  const { status } = req.body;
-  const result = await employeePayrollServices.updatePayrollStatus(_id as string, status);
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.PAYROLL_UPDATED_SUCCESSFULLY, data: result });
-});
+const updatePayroll = async (req: Request, res: Response) => {
+  try {
+    const { _id } = req.params;
+    const updateData: UpdatePayrollDTO = req.body;
+    const result = await employeePayrollServices.updatePayroll(_id as string, updateData);
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.PAYROLL_UPDATED_SUCCESSFULLY, data: result });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
-const deletePayroll = catchAsync(async (req: Request, res: Response) => {
-  const { _id } = req.params;
-  await employeePayrollServices.deletePayroll(_id as string);
-  res.status(StatusCode.OK).json({ success: true, message: MESSAGES.PAYROLL_DELETED_SUCCESSFULLY, data: null });
-});
+const updatePayrollStatus = async (req: Request, res: Response) => {
+  try {
+    const { _id } = req.params;
+    const { status }: { status: string } = req.body;
+    const result = await employeePayrollServices.updatePayrollStatus(_id as string, status as 'completed' | 'failed' | 'pending');
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.PAYROLL_UPDATED_SUCCESSFULLY, data: result });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
+
+const deletePayroll = async (req: Request, res: Response) => {
+  try {
+    const { _id } = req.params;
+    const deletedPayroll = await employeePayrollServices.deletePayroll(_id as string);
+    if (!deletedPayroll) throw new AppError(MESSAGES.PAYROLL_NOT_FOUND, StatusCode.NOT_FOUND);
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.PAYROLL_DELETED_SUCCESSFULLY, data: deletedPayroll });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
 
 export default {
   addPayroll,
+  getAllPayroll,
   getPayrollById,
   getPayrollByEmployee,
   getPayrollByPayPeriod,

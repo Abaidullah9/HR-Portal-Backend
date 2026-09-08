@@ -1,86 +1,69 @@
-import PerformanceCycle from "../models/performanceCycle.model";
+import { StatusCode } from "../utils/helper/constants/enum";
 import { AppError } from "../utils/helper/AppError";
-import { CreatePerformanceCycleDTO, UpdatePerformanceCycleDTO } from "../utils/dtos/performanceCycle.dto";
-import { getPagination, paginatedResult, PaginationQuery } from "../utils/pagination";
+import performanceCycleModel from "../models/performanceCycle.model";
+import { CreatePerformanceCycleDTO } from "../utils/dtos/performanceCycle.dto";
+import { MESSAGES } from "../utils/helper/constants/messages";
+import { getPagination, paginatedResult, PaginationQuery } from "../utils/common";
 
 const addPerformanceCycle = async (cycleData: CreatePerformanceCycleDTO) => {
-  if (!cycleData.name || !cycleData.startDate || !cycleData.endDate) {
-    throw new AppError("Missing required fields: name, startDate, endDate", 400);
-  }
+  if (!cycleData) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  if (new Date(cycleData.startDate) >= new Date(cycleData.endDate)) {
-    throw new AppError("Start date must be before end date", 400);
-  }
-
-  const existingCycle = await PerformanceCycle.findOne({ name: cycleData.name });
-  if (existingCycle) {
-    throw new AppError("Performance cycle with this name already exists", 409);
-  }
-
-  const cycle = await PerformanceCycle.create(cycleData);
-  return cycle;
+  const newCycle = await performanceCycleModel.create(cycleData);
+  return newCycle;
 };
 
-const getAllPerformanceCycle = async (query?: PaginationQuery) => {
-  if (!query || (!query.page && !query.limit)) {
-    const cycles = await PerformanceCycle.find().sort({ startDate: -1 });
-    return cycles;
-  }
+const getAllPerformanceCycle = async (query: PaginationQuery) => {
   const { page, limit, skip } = getPagination(query);
-  const [cycles, total] = await Promise.all([
-    PerformanceCycle.find().skip(skip).limit(limit).sort({ startDate: -1 }),
-    PerformanceCycle.countDocuments(),
-  ]);
-  return paginatedResult(cycles, total, page, limit);
+  const allCycles = await performanceCycleModel.find().sort({ startDate: -1 }).skip(skip).limit(limit);
+  const total = await performanceCycleModel.countDocuments();
+  if (!allCycles) throw new AppError(MESSAGES.PERFORMANCE_CYCLE_NOT_FOUND, StatusCode.NOT_FOUND);
+  return paginatedResult(allCycles, total, page, limit);
 };
 
-const getPerformanceCycleById = async (cycleId: string) => {
-  const cycle = await PerformanceCycle.findById(cycleId);
-  if (!cycle) {
-    throw new AppError("Performance cycle not found", 404);
-  }
-  return cycle;
+const getPerformanceCycleById = async (_id: string) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const cycleById = await performanceCycleModel.findById(_id);
+  if (!cycleById) throw new AppError(MESSAGES.PERFORMANCE_CYCLE_NOT_FOUND, StatusCode.NOT_FOUND);
+  return cycleById;
 };
 
 const getActivePerformanceCycle = async () => {
-  const cycle = await PerformanceCycle.findOne({ status: 'active' });
+  const cycle = await performanceCycleModel.findOne({ status: 'active' });
+  if (!cycle) throw new AppError(MESSAGES.PERFORMANCE_CYCLE_NOT_FOUND, StatusCode.NOT_FOUND);
   return cycle;
 };
 
 const getUpcomingPerformanceCycles = async () => {
-  const cycles = await PerformanceCycle.find({ status: 'upcoming' }).sort({ startDate: 1 });
+  const cycles = await performanceCycleModel.find({ status: 'upcoming' }).sort({ startDate: 1 });
+  if (!cycles) throw new AppError(MESSAGES.PERFORMANCE_CYCLE_NOT_FOUND, StatusCode.NOT_FOUND);
   return cycles;
 };
 
-const updatePerformanceCycle = async (cycleId: string, updateData: UpdatePerformanceCycleDTO) => {
-  if (updateData.name) {
-    const existingCycle = await PerformanceCycle.findOne({ name: updateData.name });
-    if (existingCycle && existingCycle._id.toString() !== cycleId) {
-      throw new AppError("Performance cycle with this name already exists", 409);
-    }
-  }
+const updatePerformanceCycle = async (_id: string, updateData: Partial<CreatePerformanceCycleDTO>) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const cycle = await PerformanceCycle.findByIdAndUpdate(cycleId, updateData, { new: true, runValidators: true });
-  if (!cycle) {
-    throw new AppError("Performance cycle not found", 404);
-  }
-  return cycle;
+  const updatedCycle = await performanceCycleModel.findByIdAndUpdate(_id, updateData, { returnDocument: 'after' });
+  if (!updatedCycle) throw new AppError(MESSAGES.PERFORMANCE_CYCLE_NOT_FOUND, StatusCode.NOT_FOUND);
+
+  return updatedCycle;
 };
 
-const updatePerformanceCycleStatus = async (cycleId: string, status: 'upcoming' | 'active' | 'completed') => {
-  const cycle = await PerformanceCycle.findByIdAndUpdate(cycleId, { status }, { new: true });
-  if (!cycle) {
-    throw new AppError("Performance cycle not found", 404);
-  }
-  return cycle;
+const updatePerformanceCycleStatus = async (_id: string, status: string) => {
+  if (!_id || !status) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const updatedCycle = await performanceCycleModel.findByIdAndUpdate(_id, { status }, { returnDocument: 'after' });
+  if (!updatedCycle) throw new AppError(MESSAGES.PERFORMANCE_CYCLE_NOT_FOUND, StatusCode.NOT_FOUND);
+
+  return updatedCycle;
 };
 
-const deletePerformanceCycle = async (cycleId: string) => {
-  const cycle = await PerformanceCycle.findByIdAndDelete(cycleId);
-  if (!cycle) {
-    throw new AppError("Performance cycle not found", 404);
-  }
-  return cycle;
+const deletePerformanceCycle = async (_id: string) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const deletedCycle = await performanceCycleModel.findByIdAndDelete(_id);
+
+  return deletedCycle;
 };
 
 export default {

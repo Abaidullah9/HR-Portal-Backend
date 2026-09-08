@@ -1,6 +1,3 @@
-/** Shared type for Mongoose filter queries */
-export type MongoFilter = Record<string, any>;
-
 /** Standard API error class */
 export class AppError extends Error {
   public statusCode: number;

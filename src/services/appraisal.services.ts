@@ -1,98 +1,91 @@
-import Appraisal from "../models/appraisal.model";
+import { StatusCode } from "../utils/helper/constants/enum";
 import { AppError } from "../utils/helper/AppError";
-import { CreateAppraisalDTO, UpdateAppraisalDTO } from "../utils/dtos/appraisal.dto";
-import { getPagination, paginatedResult, PaginationQuery } from "../utils/pagination";
+import appraisalModel from "../models/appraisal.model";
+import { CreateAppraisalDTO } from "../utils/dtos/appraisal.dto";
+import { MESSAGES } from "../utils/helper/constants/messages";
+import { getPagination, paginatedResult, PaginationQuery } from "../utils/common";
 
 const addAppraisal = async (appraisalData: CreateAppraisalDTO) => {
-  if (!appraisalData.employeeId || !appraisalData.cycleId || !appraisalData.appraiserId) {
-    throw new AppError("Missing required fields: employeeId, cycleId, appraiserId", 400);
-  }
+  if (!appraisalData) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const existingAppraisal = await Appraisal.findOne({
-    employeeId: appraisalData.employeeId,
-    cycleId: appraisalData.cycleId,
-  });
-  if (existingAppraisal) {
-    throw new AppError("Appraisal already exists for this employee in this cycle", 409);
-  }
-
-  const appraisal = await Appraisal.create(appraisalData);
-  return appraisal;
+  const newAppraisal = await appraisalModel.create(appraisalData);
+  return newAppraisal;
 };
 
-const getAllAppraisal = async (query?: PaginationQuery) => {
-  if (!query || (!query.page && !query.limit)) {
-    const appraisals = await Appraisal.find()
-      .populate("employeeId", "name email")
-      .populate("cycleId", "name")
-      .populate("appraiserId", "name email");
-    return appraisals;
-  }
+const getAllAppraisal = async (query: PaginationQuery) => {
   const { page, limit, skip } = getPagination(query);
-  const [appraisals, total] = await Promise.all([
-    Appraisal.find()
-      .skip(skip).limit(limit)
-      .populate("employeeId", "name email")
-      .populate("cycleId", "name")
-      .populate("appraiserId", "name email"),
-    Appraisal.countDocuments(),
-  ]);
-  return paginatedResult(appraisals, total, page, limit);
+  const allAppraisals = await appraisalModel.find()
+    .populate("employeeId", "name email")
+    .populate("cycleId", "name")
+    .populate("appraiserId", "name email")
+    .skip(skip)
+    .limit(limit);
+  const total = await appraisalModel.countDocuments();
+  return paginatedResult(allAppraisals, total, page, limit);
 };
 
-const getAppraisalById = async (appraisalId: string) => {
-  const appraisal = await Appraisal.findById(appraisalId)
+const getAppraisalById = async (_id: string) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const appraisalById = await appraisalModel.findById(_id)
     .populate("employeeId", "name email")
     .populate("cycleId", "name")
     .populate("appraiserId", "name email");
-  if (!appraisal) {
-    throw new AppError("Appraisal not found", 404);
-  }
-  return appraisal;
+  if (!appraisalById) throw new AppError(MESSAGES.APPRAISAL_NOT_FOUND, StatusCode.NOT_FOUND);
+  return appraisalById;
 };
 
 const getAppraisalsByEmployee = async (employeeId: string) => {
-  const appraisals = await Appraisal.find({ employeeId })
+  if (!employeeId) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const appraisals = await appraisalModel.find({ employeeId })
     .populate("cycleId", "name")
     .populate("appraiserId", "name email");
+    if(!appraisals) throw new AppError(MESSAGES.APPRAISAL_NOT_FOUND, StatusCode.NOT_FOUND);
   return appraisals;
 };
 
 const getAppraisalsByCycle = async (cycleId: string) => {
-  const appraisals = await Appraisal.find({ cycleId })
+  if (!cycleId) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const appraisals = await appraisalModel.find({ cycleId })
     .populate("employeeId", "name email")
     .populate("appraiserId", "name email");
+    if(!appraisals) throw new AppError(MESSAGES.APPRAISAL_NOT_FOUND, StatusCode.NOT_FOUND); 
   return appraisals;
 };
 
-const updateAppraisal = async (appraisalId: string, updateData: UpdateAppraisalDTO) => {
-  const appraisal = await Appraisal.findByIdAndUpdate(appraisalId, updateData, { new: true, runValidators: true })
+const updateAppraisal = async (_id: string, updateData: Partial<CreateAppraisalDTO>) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const updatedAppraisal = await appraisalModel.findByIdAndUpdate(_id, updateData, { returnDocument: 'after' })
     .populate("employeeId", "name email")
     .populate("cycleId", "name")
     .populate("appraiserId", "name email");
-  if (!appraisal) {
-    throw new AppError("Appraisal not found", 404);
-  }
-  return appraisal;
+  if (!updatedAppraisal) throw new AppError(MESSAGES.APPRAISAL_NOT_FOUND, StatusCode.NOT_FOUND);
+
+  return updatedAppraisal;
 };
 
-const updateAppraisalStatus = async (appraisalId: string, status: 'pending' | 'completed') => {
-  const appraisal = await Appraisal.findByIdAndUpdate(appraisalId, { status }, { new: true })
+const updateAppraisalStatus = async (_id: string, status: string) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+  if (!status) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const updatedAppraisal = await appraisalModel.findByIdAndUpdate(_id, { status }, { returnDocument: 'after' })
     .populate("employeeId", "name email")
     .populate("cycleId", "name")
     .populate("appraiserId", "name email");
-  if (!appraisal) {
-    throw new AppError("Appraisal not found", 404);
-  }
-  return appraisal;
+  if (!updatedAppraisal) throw new AppError(MESSAGES.APPRAISAL_NOT_FOUND, StatusCode.NOT_FOUND);
+
+  return updatedAppraisal;
 };
 
-const deleteAppraisal = async (appraisalId: string) => {
-  const appraisal = await Appraisal.findByIdAndDelete(appraisalId);
-  if (!appraisal) {
-    throw new AppError("Appraisal not found", 404);
-  }
-  return appraisal;
+const deleteAppraisal = async (_id: string) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const deletedAppraisal = await appraisalModel.findByIdAndDelete(_id);
+
+  return deletedAppraisal;
 };
 
 export default {

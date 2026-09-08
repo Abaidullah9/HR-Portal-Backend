@@ -5,12 +5,13 @@ import attendanceController from "../controllers/attendance.controller";
 
 const router = Router();
 
-router.get("/employee/:employeeId", attendanceController.getAttendanceByEmployee);
-router.get("/date/:date", attendanceController.getAttendanceByDate);
-router.get("/range/:employeeId", attendanceController.getAttendanceByDateRange);
-router.post("/", isAuthenticated, authorize("Attendance", "create"), attendanceController.addAttendance);
-router.get("/:_id", attendanceController.getAttendanceById);
-router.patch("/:_id", isAuthenticated, authorize("Attendance", "update"), attendanceController.updateAttendance);
-router.delete("/:_id", isAuthenticated, authorize("Attendance", "delete"), attendanceController.deleteAttendance);
+router.get("/paginated", isAuthenticated, authorize("read_Attendance"), attendanceController.getAllAttendance);
+router.get("/employee/:employeeId", isAuthenticated, authorize("read_Attendance"), attendanceController.getAttendanceByEmployee);
+router.get("/date/:date", isAuthenticated, authorize("read_Attendance"), attendanceController.getAttendanceByDate);
+router.get("/range/:employeeId", isAuthenticated, authorize("read_Attendance"), attendanceController.getAttendanceByDateRange);
+router.post("/", isAuthenticated, authorize("create_Attendance"), attendanceController.addAttendance);
+router.get("/:_id", isAuthenticated, authorize("read_Attendance"), attendanceController.getAttendanceById);
+router.patch("/:_id", isAuthenticated, authorize("update_Attendance"), attendanceController.updateAttendance);
+router.delete("/:_id", isAuthenticated, authorize("delete_Attendance"), attendanceController.deleteAttendance);
 
 export default router;

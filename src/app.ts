@@ -1,44 +1,31 @@
 import express from "express";
 import cors from "cors";
-import morgan from "morgan";
+import cookieParser from "cookie-parser";
 import rateLimit from "express-rate-limit";
 import apiRouter from "./routes/index";
 import errorHandler from "./middlewares/error.middleware";
+import { MESSAGES } from "./utils/helper/constants/messages";
+import { StatusCode } from "./utils/helper/constants/enum";
 
 const app = express();
 
-// ---------- Request Logging ----------
-if (process.env.NODE_ENV === "development") {
-  app.use(morgan("dev"));
-} else {
-  app.use(morgan("combined"));
-}
+app.use(cors({
+  origin: process.env.FRONTEND_URL || "http://localhost:3000",
+  credentials: true,
+}));
 
-// ---------- Rate Limiting ----------
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: { success: false, message: "Too many requests, please try again later." },
+  windowMs: 15 * 60 * 1000, 
+  max: 1000, 
+  statusCode: StatusCode.TOO_MANY_REQUESTS,
+  message: { success: false, message: MESSAGES.RATE_LIMIT_EXCEEDED },
 });
 app.use("/api/", limiter);
-
-// ---------- Body Parsing ----------
-app.use(cors());
+app.use(cookieParser());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
-
-// ---------- Static Files (uploads) ----------
 app.use("/uploads", express.static("uploads"));
-
-// ---------- Routes ----------
 app.use("/api/v1", apiRouter);
-
-// ---------- Health check ----------
-app.get("/health", (_req, res) => {
-  res.json({ success: true, message: "Server is running", timestamp: new Date().toISOString() });
-});
-
-// ---------- Error handling (must be last) ----------
 app.use(errorHandler);
 
 export default app;

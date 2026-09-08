@@ -1,108 +1,104 @@
+import { StatusCode } from "../utils/helper/constants/enum";
+import { AppError } from "../utils/helper/AppError";
+import leaveRequestModel from "../models/leaveRequest.model";
+import { CreateLeaveRequestDTO } from "../utils/dtos/leaveRequest.dto";
+import { MESSAGES } from "../utils/helper/constants/messages";
 import mongoose from "mongoose";
-import LeaveRequest from "../models/leaveRequest.model";
-import { AppError, MongoFilter } from "../utils/helper/AppError";
-import { CreateLeaveRequestDTO, UpdateLeaveRequestDTO, ApproveRejectLeaveDTO } from "../utils/dtos/leaveRequest.dto";
 import leaveBalanceServices from "./leaveBalance.services";
+import { getPagination, paginatedResult, PaginationQuery } from "../utils/common";
+import { ReadScope } from "../utils/helper/ownership";
+
 const addLeaveRequest = async (requestData: CreateLeaveRequestDTO) => {
-  if (!requestData.employeeId || !requestData.leaveType || !requestData.fromDate || !requestData.toDate || !requestData.reasonForLeave) {
-    throw new AppError("Missing required fields: employeeId, leaveType, fromDate, toDate, reasonForLeave", 400);
-  }
+  if (!requestData) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  if (new Date(requestData.fromDate) > new Date(requestData.toDate)) {
-    throw new AppError("From date cannot be after to date", 400);
-  }
+  const newRequest = await leaveRequestModel.create(requestData);
+  return newRequest;
+};
+const getAllLeaveRequest = async (query: PaginationQuery, scope: ReadScope) => {
+  const { page, limit, skip } = getPagination(query);
+  const filter: Record<string, unknown> = {};
+  if (!scope.canReadAll) filter.employeeId = scope.ownEmployeeId ?? null;
+  const allRequests = await leaveRequestModel.find(filter).populate("employeeId", "name email employeeCode").populate("approvedById", "name email employeeCode").skip(skip).limit(limit);
+  const total = await leaveRequestModel.countDocuments(filter);
+  return paginatedResult(allRequests, total, page, limit);
+};
+const getLeaveRequestById = async (_id: string, scope: ReadScope) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const leaveRequest = await LeaveRequest.create(requestData);
-  return leaveRequest;
+  const requestById = await leaveRequestModel.findById(_id);
+  if (!requestById) throw new AppError(MESSAGES.LEAVE_REQUEST_NOT_FOUND, StatusCode.NOT_FOUND);
+  if (!scope.canReadAll && requestById.employeeId.toString() !== scope.ownEmployeeId) {
+    throw new AppError(MESSAGES.NOT_AUTHORIZED, StatusCode.FORBIDDEN);
+  }
+  await requestById.populate("employeeId", "name email employeeCode");
+  await requestById.populate("approvedById", "name email employeeCode");
+  return requestById;
 };
 
-const getLeaveRequestById = async (requestId: string) => {
-  const leaveRequest = await LeaveRequest.findById(requestId)
-    .populate("employeeId", "name email")
-    .populate("approvedById", "name email");
-  if (!leaveRequest) {
-    throw new AppError("Leave request not found", 404);
+const getLeaveRequestsByEmployee = async (employeeId: string, scope: ReadScope) => {
+  if (!employeeId) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+  if (!scope.canReadAll && employeeId !== scope.ownEmployeeId) {
+    throw new AppError(MESSAGES.NOT_AUTHORIZED, StatusCode.FORBIDDEN);
   }
-  return leaveRequest;
-};
 
-const getLeaveRequestsByEmployee = async (employeeId: string) => {
-  const requests = await LeaveRequest.find({ employeeId })
-    .populate("approvedById", "name email")
-    .sort({ fromDate: -1 });
+  const requests = await leaveRequestModel.find({ employeeId }).populate("employeeId", "name email employeeCode").populate("approvedById", "name email employeeCode");
+  if (!requests) throw new AppError(MESSAGES.LEAVE_REQUEST_NOT_FOUND, StatusCode.NOT_FOUND);
   return requests;
 };
 
-const getLeaveRequestsByStatus = async (status: string) => {
-  const queryFilter: MongoFilter = { leaveStatus: status };
-  const requests = await LeaveRequest.find(queryFilter)
-    .populate("employeeId", "name email")
-    .populate("approvedById", "name email")
-    .sort({ fromDate: -1 });
+const getLeaveRequestsByStatus = async (status: string, scope: ReadScope) => {
+  if (!status) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const filter: Record<string, unknown> = { leaveStatus: status };
+  if (!scope.canReadAll) filter.employeeId = scope.ownEmployeeId ?? null;
+  const requests = await leaveRequestModel.find(filter).populate("employeeId", "name email employeeCode").populate("approvedById", "name email employeeCode");
+  if (!requests) throw new AppError(MESSAGES.LEAVE_REQUEST_NOT_FOUND, StatusCode.NOT_FOUND);
   return requests;
 };
 
-const getLeaveRequestsByDateRange = async (startDate: Date, endDate: Date) => {
-  const requests = await LeaveRequest.find({
+const getLeaveRequestsByDateRange = async (startDate: Date, endDate: Date, scope: ReadScope) => {
+  if (!startDate || !endDate) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const filter: Record<string, unknown> = {
     fromDate: { $gte: startDate },
     toDate: { $lte: endDate },
-  })
-    .populate("employeeId", "name email")
-    .sort({ fromDate: 1 });
+  };
+  if (!scope.canReadAll) filter.employeeId = scope.ownEmployeeId ?? null;
+  const requests = await leaveRequestModel.find(filter).populate("employeeId", "name email employeeCode").populate("approvedById", "name email employeeCode");
+  if (!requests) throw new AppError(MESSAGES.LEAVE_REQUEST_NOT_FOUND, StatusCode.NOT_FOUND);
   return requests;
 };
 
-const updateLeaveRequest = async (requestId: string, updateData: UpdateLeaveRequestDTO) => {
-  const request = await LeaveRequest.findById(requestId);
-  if (!request) {
-    throw new AppError("Leave request not found", 404);
+const updateLeaveRequest = async (_id: string, updateData: Partial<CreateLeaveRequestDTO>, scope: ReadScope) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const existingRequest = await leaveRequestModel.findById(_id);
+  if (!existingRequest) throw new AppError(MESSAGES.LEAVE_REQUEST_NOT_FOUND, StatusCode.NOT_FOUND);
+  if (!scope.canReadAll && existingRequest.employeeId.toString() !== scope.ownEmployeeId) {
+    throw new AppError(MESSAGES.NOT_AUTHORIZED, StatusCode.FORBIDDEN);
   }
 
-  if (request.leaveStatus !== 'pending') {
-    throw new AppError("Cannot update a non-pending leave request", 400);
-  }
+  const updatedRequest = await leaveRequestModel.findByIdAndUpdate(_id, updateData, { returnDocument: 'after' }).populate("employeeId", "name email employeeCode").populate("approvedById", "name email employeeCode");
+  if (!updatedRequest) throw new AppError(MESSAGES.LEAVE_REQUEST_NOT_FOUND, StatusCode.NOT_FOUND);
 
-  const updatedRequest = await LeaveRequest.findByIdAndUpdate(requestId, updateData, { new: true, runValidators: true })
-    .populate("employeeId", "name email");
   return updatedRequest;
 };
 
-const approveRejectLeave = async (requestId: string, approvalData: ApproveRejectLeaveDTO) => {
-  if (!approvalData.leaveStatus || !approvalData.approvedById) {
-    throw new AppError("Missing required fields: leaveStatus, approvedById", 400);
-  }
+const approveRejectLeave = async (requestId: string, approvalData: { leaveStatus: 'approved' | 'rejected'; approvedById: string; rejectionReason?: string }) => {
+  if (!requestId || !approvalData) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  if (!['approved', 'rejected'].includes(approvalData.leaveStatus)) {
-    throw new AppError("Leave status must be 'approved' or 'rejected'", 400);
-  }
+  const request = await leaveRequestModel.findById(requestId);
+  if (!request) throw new AppError(MESSAGES.LEAVE_REQUEST_NOT_FOUND, StatusCode.NOT_FOUND);
+  if (request.leaveStatus !== 'pending') throw new AppError(MESSAGES.CANNOT_UPDATE_NON_PENDING, StatusCode.BAD_REQUEST);
 
-  if (approvalData.leaveStatus === 'rejected' && !approvalData.rejectionReason) {
-    throw new AppError("Rejection reason is required when rejecting a leave request", 400);
-  }
-
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
-  try {
-    const request = await LeaveRequest.findById(requestId).session(session);
-    if (!request) {
-      throw new AppError("Leave request not found", 404);
+  const applyDecision = async (session?: mongoose.ClientSession) => {
+    request.leaveStatus = approvalData.leaveStatus;
+    request.approvedById = new mongoose.Types.ObjectId(approvalData.approvedById);
+    if (approvalData.rejectionReason) {
+      request.rejectionReason = approvalData.rejectionReason;
     }
+    await request.save(session ? { session } : {});
 
-    if (request.leaveStatus !== 'pending') {
-      throw new AppError("Leave request has already been processed", 400);
-    }
-
-    const leaveUpdatePayload: Record<string, any> = {
-      leaveStatus: approvalData.leaveStatus,
-      approvedById: approvalData.approvedById,
-    };
-
-    if (approvalData.leaveStatus === 'rejected' && approvalData.rejectionReason) {
-      leaveUpdatePayload.rejectionReason = approvalData.rejectionReason;
-    }
-
-    // If approved, automatically deduct leave balance (in transaction)
     if (approvalData.leaveStatus === 'approved') {
       const fromDate = new Date(request.fromDate);
       const toDate = new Date(request.toDate);
@@ -113,49 +109,69 @@ const approveRejectLeave = async (requestId: string, approvalData: ApproveReject
         request.employeeId.toString(),
         request.leaveType,
         year,
-        daysDiff
+        daysDiff,
+        session
       );
     }
+  };
 
-    const updatedRequest = await LeaveRequest.findByIdAndUpdate(requestId, leaveUpdatePayload, { new: true, session })
-      .populate("employeeId", "name email")
-      .populate("approvedById", "name email");
-
+  const session = await mongoose.startSession();
+  let transactionStarted = false;
+  try {
+    session.startTransaction();
+    transactionStarted = true;
+    await applyDecision(session);
     await session.commitTransaction();
-    return updatedRequest;
-  } catch (error) {
-    await session.abortTransaction();
-    throw error;
+  } catch (error: any) {
+    await session.abortTransaction().catch(() => {});
+
+    // Standalone MongoDB (local dev) doesn't support multi-document transactions.
+    // Fall back to plain sequential writes instead of failing with a 500.
+    const txUnsupported = /retryable writes|Transaction numbers/i.test(error?.message || '') || error?.code === 20;
+    if (!transactionStarted || !txUnsupported) {
+      throw error;
+    }
+    request.$session(null);
+    await applyDecision();
   } finally {
     session.endSession();
   }
+
+  return request;
 };
 
-const cancelLeaveRequest = async (requestId: string) => {
-  const request = await LeaveRequest.findById(requestId);
-  if (!request) {
-    throw new AppError("Leave request not found", 404);
-  }
+const cancelLeaveRequest = async (_id: string, scope: ReadScope) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  if (request.leaveStatus !== 'pending') {
-    throw new AppError("Can only cancel pending leave requests", 400);
+  const request = await leaveRequestModel.findById(_id);
+  if (!request) throw new AppError(MESSAGES.LEAVE_REQUEST_NOT_FOUND, StatusCode.NOT_FOUND);
+  if (!scope.canReadAll && request.employeeId.toString() !== scope.ownEmployeeId) {
+    throw new AppError(MESSAGES.NOT_AUTHORIZED, StatusCode.FORBIDDEN);
   }
+  if (request.leaveStatus !== 'pending') throw new AppError(MESSAGES.CANNOT_CANCEL_NON_PENDING, StatusCode.BAD_REQUEST);
 
   request.leaveStatus = 'cancelled';
   await request.save();
   return request;
 };
 
-const deleteLeaveRequest = async (requestId: string) => {
-  const request = await LeaveRequest.findByIdAndDelete(requestId);
-  if (!request) {
-    throw new AppError("Leave request not found", 404);
+const deleteLeaveRequest = async (_id: string, scope: ReadScope) => {
+  if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const existingRequest = await leaveRequestModel.findById(_id);
+  if (!existingRequest) throw new AppError(MESSAGES.LEAVE_REQUEST_NOT_FOUND, StatusCode.NOT_FOUND);
+  if (!scope.canReadAll && existingRequest.employeeId.toString() !== scope.ownEmployeeId) {
+    throw new AppError(MESSAGES.NOT_AUTHORIZED, StatusCode.FORBIDDEN);
   }
-  return request;
+
+  const deletedRequest = await leaveRequestModel.findByIdAndDelete(_id);
+
+  return deletedRequest;
 };
 
 export default {
   addLeaveRequest,
+  getAllLeaveRequest,
   getLeaveRequestById,
   getLeaveRequestsByEmployee,
   getLeaveRequestsByStatus,

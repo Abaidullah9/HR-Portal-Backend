@@ -1,6 +1,4 @@
 import mongoose, { Schema, Document } from 'mongoose';
-
-
 export interface ILeaveBalance extends Document {
   employeeId: mongoose.Types.ObjectId;
   leaveType: string;

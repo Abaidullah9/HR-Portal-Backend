@@ -5,13 +5,13 @@ import appraisalController from "../controllers/appraisal.controller";
 
 const router = Router();
 
-router.get("/", appraisalController.getAllAppraisal);
-router.get("/employee/:employeeId", appraisalController.getAppraisalByEmployee);
-router.get("/cycle/:cycleId", appraisalController.getAppraisalByCycle);
-router.get("/:_id", appraisalController.getAppraisalById);
-router.post("/", isAuthenticated, authorize("Appraisal", "create"), appraisalController.addAppraisal);
-router.patch("/:_id", isAuthenticated, authorize("Appraisal", "update"), appraisalController.updateAppraisal);
-router.patch("/:_id/status", isAuthenticated, authorize("Appraisal", "updateStatus"), appraisalController.updateAppraisalStatus);
-router.delete("/:_id", isAuthenticated, authorize("Appraisal", "delete"), appraisalController.deleteAppraisal);
+router.get("/paginated", isAuthenticated, authorize("read_Appraisal"), appraisalController.getAllAppraisal);
+router.get("/employee/:employeeId", isAuthenticated, authorize("read_Appraisal"), appraisalController.getAppraisalByEmployee);
+router.get("/cycle/:cycleId", isAuthenticated, authorize("read_Appraisal"), appraisalController.getAppraisalByCycle);
+router.get("/:_id", isAuthenticated, authorize("read_Appraisal"), appraisalController.getAppraisalById);
+router.post("/", isAuthenticated, authorize("create_Appraisal"), appraisalController.addAppraisal);
+router.patch("/:_id/status", isAuthenticated, authorize("update_AppraisalStatus"), appraisalController.updateAppraisalStatus);
+router.patch("/:_id", isAuthenticated, authorize("update_Appraisal"), appraisalController.updateAppraisal);
+router.delete("/:_id", isAuthenticated, authorize("delete_Appraisal"), appraisalController.deleteAppraisal);
 
 export default router;

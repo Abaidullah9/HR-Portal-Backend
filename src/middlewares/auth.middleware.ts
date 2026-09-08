@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import userModel from "../models/user.model";
 import roleModel from "../models/role.model";
+import { MESSAGES } from "../utils/helper/constants/messages";
+import { StatusCode } from "../utils/helper/constants/enum";
 
 declare global {
   namespace Express {
@@ -12,65 +14,103 @@ declare global {
   }
 }
 
-export const isAuthenticated = async (req: Request, res: Response, next: NextFunction) => {
+export const isAuthenticated = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
   let token = req.cookies?.accessToken;
   if (!token && req.headers.authorization?.startsWith("Bearer")) {
     token = req.headers.authorization.split(" ")[1];
   }
   if (!token) {
-    res.status(401).json({ success: false, message: "You are not logged in. Please log in to get access." });
+    res
+      .status(StatusCode.UNAUTHORIZED)
+      .json({
+        success: false,
+        message: MESSAGES.NOT_LOGGED_IN,
+      });
     return;
   }
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as jwt.JwtPayload;
-    const currentUser = await userModel.findOne({ _id: decoded.userId, isActive: true });
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET!,
+    ) as jwt.JwtPayload;
+    const currentUser = await userModel.findOne({
+      _id: decoded.userId,
+      isActive: true,
+    });
     if (!currentUser) {
-      res.status(401).json({ success: false, message: "The user belonging to this token no longer exists." });
+      res
+        .status(StatusCode.UNAUTHORIZED)
+        .json({
+          success: false,
+          message: MESSAGES.USER_NO_LONGER_EXISTS,
+        });
       return;
     }
     req.user = currentUser;
     req.userId = currentUser._id.toString();
     next();
   } catch (error) {
-    res.status(401).json({ success: false, message: "Invalid or expired token." });
+    res
+      .status(StatusCode.UNAUTHORIZED)
+      .json({ success: false, message: MESSAGES.INVALID_OR_EXPIRED_TOKEN });
     return;
   }
 };
 
-export const isAdmin = async (req: Request, res: Response, next: NextFunction) => {
+export const isAdmin = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
   const user = req.user;
   if (!user) {
-    res.status(401).json({ success: false, message: "Not authenticated" });
+    res.status(StatusCode.UNAUTHORIZED).json({ success: false, message: MESSAGES.NOT_AUTHENTICATED });
     return;
   }
 
   try {
     const role = await roleModel.findById(user.roleId);
     if (!role) {
-      res.status(403).json({ success: false, message: "Role not found." });
+      res.status(StatusCode.FORBIDDEN).json({ success: false, message: MESSAGES.ROLE_NOT_FOUND });
       return;
     }
     if (role.roleName.toLowerCase() !== "admin") {
-      res.status(403).json({ success: false, message: "Admin access required." });
+      res
+        .status(StatusCode.FORBIDDEN)
+        .json({ success: false, message: MESSAGES.ADMIN_ACCESS_REQUIRED });
       return;
     }
     next();
   } catch (error) {
-    res.status(500).json({ success: false, message: "Internal server error." });
+    res.status(StatusCode.INTERNAL_SERVER_ERROR).json({ success: false, message: MESSAGES.INTERNAL_SERVER_ERROR });
     return;
   }
 };
 
-export const attachUser = async (req: Request, res: Response, next: NextFunction) => {
+export const attachUser = async (
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) => {
   let token = req.cookies?.accessToken;
   if (!token && req.headers.authorization?.startsWith("Bearer")) {
     token = req.headers.authorization.split(" ")[1];
   }
   if (token) {
     try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as jwt.JwtPayload;
-      const currentUser = await userModel.findOne({ _id: decoded.userId, isActive: true });
+      const decoded = jwt.verify(
+        token,
+        process.env.JWT_SECRET!,
+      ) as jwt.JwtPayload;
+      const currentUser = await userModel.findOne({
+        _id: decoded.userId,
+        isActive: true,
+      });
       if (currentUser) {
         req.user = currentUser;
         req.userId = currentUser._id.toString();

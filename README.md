@@ -22,10 +22,11 @@ Pairs with the [HR Portal Frontend](https://github.com/Abaidullah9/HR-Portal-Fro
 ### Setup
 
 ```bash
+cp .env.example .env   # then fill in real values
 npm install
 ```
 
-Create a `.env` file in the project root:
+Create a `.env` file in the project root (or copy the committed template):
 
 ```env
 PORT=5000
@@ -55,7 +56,7 @@ The API is now available at `http://localhost:5000/api/v1`.
 |---|---|---|
 | `PORT` | No | Server port (default `3001`; typically set to `5000` in `.env`) |
 | `MONGO_URI` | Yes | MongoDB connection string |
-| `JWT_SECRET` | Yes | Secret used to sign auth tokens — use a long random value |
+| `JWT_SECRET` | Yes | Secret used to sign auth tokens — use a long random value (see `.env.example` for a generator command) |
 | `NODE_ENV` | No | `development` or `production` |
 | `FRONTEND_URL` | No | Allowed CORS origin (default `http://localhost:3000`) |
 

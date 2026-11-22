@@ -3,6 +3,8 @@ export interface CreateAttendanceDTO {
   date: Date;
   checkIn?: Date;
   checkOut?: Date;
+  regularized?: boolean;
+  regularizationNote?: string;
 }
 
 export interface UpdateAttendanceDTO {

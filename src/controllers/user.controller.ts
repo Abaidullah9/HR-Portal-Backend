@@ -6,6 +6,8 @@ import { StatusCode } from "../utils/helper/constants/enum";
 import { AppError } from "../utils/helper/AppError";
 import { CreateUserDTO, UpdateUserDTO } from "../utils/dtos/user.dto";
 import { PaginationQuery } from "../utils/common";
+import { currentContext } from "../utils/context";
+import { generateToken } from "../utils/helper/helper.functions";
 
 const setTokenCookie = (res: Response, token: string) => {
   res.cookie("accessToken", token, {
@@ -119,6 +121,49 @@ const updateRole = async (req: Request, res: Response) => {
   }
 };
 
+const inviteUser = async (req: Request, res: Response) => {
+  try {
+    const { name, email, roleId, roleName } = req.body as {
+      name?: string;
+      email?: string;
+      roleId?: string;
+      roleName?: string;
+    };
+    const data = await userServices.inviteUser(
+      { name: name ?? '', email: email ?? '', ...(roleId ? { roleId } : {}), ...(roleName ? { roleName } : {}) },
+      currentContext()?.organizationId,
+    );
+    res.status(StatusCode.CREATED).json({ success: true, message: 'Invite sent', data });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
+
+const acceptInvite = async (req: Request, res: Response) => {
+  try {
+    const { token, password } = req.body as { token?: string; password?: string };
+    const user = await userServices.acceptInvite(token ?? '', password ?? '');
+    const jwt = generateToken(user._id.toString());
+    setTokenCookie(res, jwt);
+    res.status(StatusCode.OK).json({ success: true, message: 'Account activated', data: { user, token: jwt } });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
+
+const changePassword = async (req: Request, res: Response) => {
+  try {
+    const { currentPassword, newPassword } = req.body as {
+      currentPassword?: string;
+      newPassword?: string;
+    };
+    const data = await userServices.changePassword(req.userId!, currentPassword ?? '', newPassword ?? '');
+    res.status(StatusCode.OK).json({ success: true, message: 'Password updated', data });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
+
 const getMe = async (req: Request, res: Response) => {
   try {
     const userId = req.userId!;
@@ -129,8 +174,37 @@ const getMe = async (req: Request, res: Response) => {
   }
 };
 
+const forgotPassword = async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body as { email?: string };
+    const data = await userServices.forgotPassword(email ?? "");
+    res.status(StatusCode.OK).json({
+      success: true,
+      message: "If that email is registered, a reset link has been sent",
+      data,
+    });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
+
+const resetPassword = async (req: Request, res: Response) => {
+  try {
+    const { token, password } = req.body as { token?: string; password?: string };
+    await userServices.resetPassword(token ?? "", password ?? "");
+    res.status(StatusCode.OK).json({ success: true, message: "Password updated. Sign in with the new password." });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
+
 export default {
   registerUser,
+  inviteUser,
+  acceptInvite,
+  changePassword,
+  forgotPassword,
+  resetPassword,
   loginUser,
   logoutUser,
   getAllUser,

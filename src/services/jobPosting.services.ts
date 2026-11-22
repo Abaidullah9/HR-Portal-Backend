@@ -9,6 +9,8 @@ const addJobPosting = async (postingData: CreateJobPostingDTO) => {
   if (!postingData) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
   const newPosting = await jobPostingModel.create(postingData);
+  await newPosting.populate("departmentId", "name");
+  await newPosting.populate("postedBy", "name email employeeCode");
   return newPosting;
 };
 

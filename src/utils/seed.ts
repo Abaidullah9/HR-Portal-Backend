@@ -65,6 +65,7 @@ async function seedDatabase() {
       phone: '+1-555-0198',
       address: '123 Innovation Drive, Tech City, TC 90210',
       workingDays: [1, 2, 3, 4, 5],
+      lateAfter: '09:15',
       logoUrl: 'https://example.com/logo.png'
     });
 
@@ -211,7 +212,9 @@ async function seedDatabase() {
     const managerActionIds = actionDocs
       .filter(a => managerModules.some(m => a.actionName.endsWith(`_${m}`)))
       .map(a => a._id);
-    // Employee gets: LeaveRequest, Feedback, Document, Attendance (but NOT approveReject)
+    // Employee gets: LeaveRequest, Feedback, Document, Attendance (but NOT approveReject).
+    // Self-service views are authorised on actions Employee already holds, so no
+    // extra read grants are needed here.
     const employeeModules = ['LeaveRequest', 'Feedback', 'Document', 'Attendance'];
     const employeeActionIds = actionDocs
       .filter(a => employeeModules.some(m => a.actionName.endsWith(`_${m}`)) && a.actionName !== 'approveReject_LeaveRequest')
@@ -254,6 +257,7 @@ async function seedDatabase() {
       departmentId: departments[0]!._id,
       position: 'Engineering Manager',
       employmentType: 'full-time',
+      salary: 9500,
       isActive: true,
       joiningDate: new Date('2022-01-15'),
     });
@@ -270,6 +274,7 @@ async function seedDatabase() {
       reportingManagerId: managerEmp._id,
       position: 'Senior Software Engineer',
       employmentType: 'full-time',
+      salary: 7916.67,
       isActive: true,
       joiningDate: new Date('2023-03-10'),
     });

@@ -22,7 +22,10 @@ const addAttendance = async (req: Request, res: Response) => {
 const getAllAttendance = async (req: Request, res: Response) => {
   try {
     const scope = await resolveReadScope(req.userId!);
-    const { data, pagination } = await attendanceServices.getAllAttendance(req.query as PaginationQuery, scope);
+    const { data, pagination } = await attendanceServices.getAllAttendance(
+      req.query as PaginationQuery & { date?: string },
+      scope,
+    );
     res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ALL_ATTENDANCE_FETCHED_SUCCESSFULLY, data, pagination });
   } catch (error) {
     sendErrorResponse(res, error);
@@ -98,7 +101,8 @@ const updateAttendance = async (req: Request, res: Response) => {
   try {
     const { _id } = req.params;
     const updateData: UpdateAttendanceDTO = req.body;
-    const result = await attendanceServices.updateAttendance(_id as string, updateData);
+    const scope = await resolveReadScope(req.userId!);
+    const result = await attendanceServices.updateAttendance(_id as string, updateData, scope);
     res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ATTENDANCE_UPDATED_SUCCESSFULLY, data: result });
   } catch (error) {
     sendErrorResponse(res, error);
@@ -108,7 +112,8 @@ const updateAttendance = async (req: Request, res: Response) => {
 const deleteAttendance = async (req: Request, res: Response) => {
   try {
     const { _id } = req.params;
-    const deletedAttendance = await attendanceServices.deleteAttendance(_id as string);
+    const scope = await resolveReadScope(req.userId!);
+    const deletedAttendance = await attendanceServices.deleteAttendance(_id as string, scope);
     if (!deletedAttendance) throw new AppError(MESSAGES.ATTENDANCE_NOT_FOUND, StatusCode.NOT_FOUND);
     res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ATTENDANCE_DELETED_SUCCESSFULLY, data: deletedAttendance });
   } catch (error) {

@@ -29,12 +29,12 @@ export const validateRequiredString = (value: string, fieldName: string): string
   return null;
 };
 
-/** Validates user registration payload */
+/** Validates user registration payload. roleId is optional — the service
+ * defaults self-registrations to the least-privileged role (see user.services). */
 export const validateCreateUser = (body: any): string | null => {
   if (!body.name) return `Name ${MESSAGES.FIELD_REQUIRED}`;
   if (!body.email) return `Email ${MESSAGES.FIELD_REQUIRED}`;
   if (!body.password) return `Password ${MESSAGES.FIELD_REQUIRED}`;
-  if (!body.roleId) return `Role ID ${MESSAGES.FIELD_REQUIRED}`;
   const emailError = validateEmail(body.email);
   if (emailError) return emailError;
   const passwordError = validatePasswordLength(body.password);
@@ -66,11 +66,23 @@ export const validateCreateLeaveRequest = (body: any): string | null => {
   return null;
 };
 
+/** Validates job posting creation payload. postedBy is derived from the
+ * authenticated user in the controller, not the client body. */
+export const validateCreateJobPosting = (body: any): string | null => {
+  if (!body.position) return `Position ${MESSAGES.FIELD_REQUIRED}`;
+  if (!body.departmentId) return `Department ${MESSAGES.FIELD_REQUIRED}`;
+  if (!body.description) return `Description ${MESSAGES.FIELD_REQUIRED}`;
+  if (body.numberOfOpenings !== undefined && (!Number.isInteger(body.numberOfOpenings) || body.numberOfOpenings < 1)) {
+    return 'Number of openings must be a positive integer';
+  }
+  return null;
+};
+
 /** Validates leave approval/rejection payload */
 export const validateApproveRejectLeave = (body: any): string | null => {
   if (!body.leaveStatus) return `Leave status ${MESSAGES.FIELD_REQUIRED}`;
   if (!["approved", "rejected"].includes(body.leaveStatus)) return MESSAGES.INVALID_LEAVE_STATUS;
-  if (!body.approvedById) return `Approved by ID ${MESSAGES.FIELD_REQUIRED}`;
+  // approvedById is derived from the authenticated user in the controller, not the client body
   if (body.leaveStatus === "rejected" && !body.rejectionReason) return MESSAGES.REJECTION_REASON_REQUIRED;
   return null;
 };

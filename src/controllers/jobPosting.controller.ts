@@ -9,7 +9,8 @@ import { PaginationQuery } from "../utils/common";
 
 const addJobPosting = async (req: Request, res: Response) => {
   try {
-    const body: CreateJobPostingDTO = req.body;
+    // postedBy always comes from the authenticated user, never the client body
+    const body: CreateJobPostingDTO = { ...req.body, postedBy: req.userId! };
     const newPosting = await jobPostingServices.addJobPosting(body);
     if (!newPosting) throw new AppError(MESSAGES.FAILED_TO_CREATE_JOB_POSTING, StatusCode.INTERNAL_SERVER_ERROR);
     res.status(StatusCode.CREATED).json({ success: true, message: MESSAGES.JOB_POSTING_ADDED_SUCCESSFULLY, data: newPosting });

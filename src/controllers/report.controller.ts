@@ -9,7 +9,8 @@ import { PaginationQuery } from "../utils/common";
 
 const addReport = async (req: Request, res: Response) => {
   try {
-    const body: CreateReportDTO = req.body;
+    // generatedBy always comes from the authenticated user, never the client body
+    const body: CreateReportDTO = { ...req.body, generatedBy: req.userId! };
     const newReport = await reportServices.addReport(body);
     if (!newReport) throw new AppError(MESSAGES.FAILED_TO_CREATE_REPORT, StatusCode.INTERNAL_SERVER_ERROR);
     res.status(StatusCode.CREATED).json({ success: true, message: MESSAGES.REPORT_ADDED_SUCCESSFULLY, data: newReport });

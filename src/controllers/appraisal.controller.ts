@@ -9,6 +9,7 @@ import {
   UpdateAppraisalDTO,
 } from "../utils/dtos/appraisal.dto";
 import { PaginationQuery } from "../utils/common";
+import { resolveReadScope } from "../utils/helper/ownership";
 
 const addAppraisal = async (req: Request, res: Response) => {
   try {
@@ -33,8 +34,10 @@ const addAppraisal = async (req: Request, res: Response) => {
 
 const getAllAppraisal = async (req: Request, res: Response) => {
   try {
+    const scope = await resolveReadScope(req.userId!);
     const { data, pagination } = await appraisalServices.getAllAppraisal(
       req.query as PaginationQuery,
+      scope,
     );
     res
       .status(StatusCode.OK)
@@ -52,7 +55,8 @@ const getAllAppraisal = async (req: Request, res: Response) => {
 const getAppraisalById = async (req: Request, res: Response) => {
   try {
     const { _id } = req.params;
-    const result = await appraisalServices.getAppraisalById(_id as string);
+    const scope = await resolveReadScope(req.userId!);
+    const result = await appraisalServices.getAppraisalById(_id as string, scope);
     res
       .status(StatusCode.OK)
       .json({
@@ -65,11 +69,32 @@ const getAppraisalById = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * The caller's own reviews. Employees hold no read_Appraisal, so this is
+ * authorised on an action every role holds and scoped to the caller's own
+ * employee record rather than an id from the request.
+ */
+const getMyAppraisals = async (req: Request, res: Response) => {
+  try {
+    const scope = await resolveReadScope(req.userId!);
+    const data = scope.ownEmployeeId
+      ? await appraisalServices.getAppraisalsByEmployee(scope.ownEmployeeId, scope)
+      : [];
+    res
+      .status(StatusCode.OK)
+      .json({ success: true, message: MESSAGES.ALL_APPRAISALS_FETCHED_SUCCESSFULLY, data });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
+
 const getAppraisalByEmployee = async (req: Request, res: Response) => {
   try {
     const { employeeId } = req.params;
+    const scope = await resolveReadScope(req.userId!);
     const result = await appraisalServices.getAppraisalsByEmployee(
       employeeId as string,
+      scope,
     );
     res
       .status(StatusCode.OK)
@@ -164,7 +189,65 @@ const deleteAppraisal = async (req: Request, res: Response) => {
   }
 };
 
+const submitSelfReview = async (req: Request, res: Response) => {
+  try {
+    const scope = await resolveReadScope(req.userId!);
+    const result = await appraisalServices.submitSelfReview(
+      req.params._id as string,
+      req.body as { comment: string; rating?: number },
+      scope,
+    );
+    res.status(StatusCode.OK).json({ success: true, message: 'Self review submitted', data: result });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
+
+const submitManagerReview = async (req: Request, res: Response) => {
+  try {
+    const scope = await resolveReadScope(req.userId!);
+    const result = await appraisalServices.submitManagerReview(
+      req.params._id as string,
+      req.body as { comment: string; rating?: number },
+      scope,
+    );
+    res.status(StatusCode.OK).json({ success: true, message: 'Manager review submitted', data: result });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
+
+const calibrate = async (req: Request, res: Response) => {
+  try {
+    const scope = await resolveReadScope(req.userId!);
+    const result = await appraisalServices.calibrate(
+      req.params._id as string,
+      req.body as { note: string; rating?: number },
+      scope,
+      req.userId,
+    );
+    res.status(StatusCode.OK).json({ success: true, message: 'Appraisal calibrated', data: result });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
+
+const lock = async (req: Request, res: Response) => {
+  try {
+    const scope = await resolveReadScope(req.userId!);
+    const result = await appraisalServices.lock(req.params._id as string, scope);
+    res.status(StatusCode.OK).json({ success: true, message: 'Appraisal locked', data: result });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
+
 export default {
+  getMyAppraisals,
+  submitSelfReview,
+  submitManagerReview,
+  calibrate,
+  lock,
   addAppraisal,
   getAllAppraisal,
   getAppraisalById,

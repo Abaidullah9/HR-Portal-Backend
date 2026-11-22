@@ -4,6 +4,7 @@ import userModel from "../models/user.model";
 import roleModel from "../models/role.model";
 import { MESSAGES } from "../utils/helper/constants/messages";
 import { StatusCode } from "../utils/helper/constants/enum";
+import { setContextOrganization, setContextUser } from "../utils/context";
 
 declare global {
   namespace Express {
@@ -53,6 +54,10 @@ export const isAuthenticated = async (
     }
     req.user = currentUser;
     req.userId = currentUser._id.toString();
+    // Tenant scope for every query in this request comes from the user record,
+    // never from anything the client sends.
+    setContextUser(req.userId);
+    setContextOrganization(currentUser.organizationId?.toString());
     next();
   } catch (error) {
     res

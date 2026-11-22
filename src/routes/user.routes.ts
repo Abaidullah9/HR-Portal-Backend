@@ -19,8 +19,13 @@ const router = Router();
 
 router.post("/register", validateResource(validateCreateUser), userController.registerUser);
 router.post("/login", loginLimiter, userController.loginUser);
+router.post("/accept-invite", loginLimiter, userController.acceptInvite);
+router.post("/forgot-password", loginLimiter, userController.forgotPassword);
+router.post("/change-password", isAuthenticated, userController.changePassword);
+router.post("/reset-password", loginLimiter, userController.resetPassword);
 router.post("/logout", userController.logoutUser);
 router.get("/me", isAuthenticated, userController.getMe);
+router.post("/invite", isAuthenticated, authorize("update_User"), userController.inviteUser);
 router.get("/paginated", isAuthenticated, authorize("read_User"), userController.getAllUser);
 router.get("/:_id", isAuthenticated, authorize("read_User"), userController.getUserById);
 router.patch("/:_id/status", isAuthenticated, authorize("updateStatus_User"), userController.updateStatus);

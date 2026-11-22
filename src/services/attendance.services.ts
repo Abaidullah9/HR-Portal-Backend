@@ -1,23 +1,57 @@
-import { StatusCode } from "../utils/helper/constants/enum";
-import { AppError } from "../utils/helper/AppError";
-import attendanceModel from "../models/attendance.model";
-import { CreateAttendanceDTO } from "../utils/dtos/attendance.dto";
-import { MESSAGES } from "../utils/helper/constants/messages";
-import { getPagination, paginatedResult, PaginationQuery } from "../utils/common";
-import { ReadScope } from "../utils/helper/ownership";
+import { StatusCode } from '../utils/helper/constants/enum';
+import { AppError } from '../utils/helper/AppError';
+import attendanceModel from '../models/attendance.model';
+import { CreateAttendanceDTO } from '../utils/dtos/attendance.dto';
+import { MESSAGES } from '../utils/helper/constants/messages';
+import { getPagination, paginatedResult, PaginationQuery } from '../utils/common';
+import { canAccessEmployee, scopeEmployeeFilter, type ReadScope } from '../utils/helper/ownership';
+import { tenantFields, tenantFilter } from '../utils/context';
+import { dayKey, dayRangeFilter, isDayKey, startOfDay } from '../utils/dates';
 
 const addAttendance = async (attendanceData: CreateAttendanceDTO) => {
   if (!attendanceData) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+  if (!attendanceData.employeeId) throw new AppError(MESSAGES.EMPLOYEE_ID_REQUIRED, StatusCode.BAD_REQUEST);
 
-  const newAttendance = await attendanceModel.create(attendanceData);
+  const date = attendanceData.date ? new Date(attendanceData.date) : new Date();
+  if (Number.isNaN(date.getTime())) throw new AppError(MESSAGES.INVALID_DATE_FORMAT, StatusCode.BAD_REQUEST);
+  const key = dayKey(date);
+
+  const existing = await attendanceModel.findOne({ employeeId: attendanceData.employeeId, dateKey: key });
+  if (existing) {
+    throw new AppError(`Attendance for ${key} already exists. Ask a manager to regularize it instead.`, StatusCode.CONFLICT);
+  }
+
+  // The unique index is on the calendar key, so a second check-in the same day
+  // is rejected rather than silently creating two rows.
+  const newAttendance = await attendanceModel.create({
+    ...attendanceData,
+    ...tenantFields(),
+    date: startOfDay(key),
+    dateKey: key,
+    checkIn: attendanceData.checkIn ?? new Date(),
+  });
   return newAttendance;
 };
 
-const getAllAttendance = async (query: PaginationQuery, scope: ReadScope) => {
+const getAllAttendance = async (
+  query: PaginationQuery & { date?: string },
+  scope: ReadScope,
+) => {
   const { page, limit, skip } = getPagination(query);
-  const filter: Record<string, unknown> = {};
-  if (!scope.canReadAll) filter.employeeId = scope.ownEmployeeId ?? null;
-  const allAttendance = await attendanceModel.find(filter).populate("employeeId", "name email employeeCode").skip(skip).limit(limit);
+  const filter: Record<string, unknown> = tenantFilter(scopeEmployeeFilter(scope));
+
+  // Paging applies to the filter, so the day filter has to be part of it rather
+  // than something the client trims after the fact.
+  if (typeof query.date === 'string' && query.date) {
+    filter.date = isDayKey(query.date) ? dayRangeFilter(query.date) : dayRangeFilter(dayKey(new Date(query.date)));
+  }
+
+  const allAttendance = await attendanceModel
+    .find(filter)
+    .populate('employeeId', 'name email employeeCode')
+    .sort({ date: -1 })
+    .skip(skip)
+    .limit(limit);
   const total = await attendanceModel.countDocuments(filter);
   return paginatedResult(allAttendance, total, page, limit);
 };
@@ -27,63 +61,96 @@ const getAttendanceById = async (_id: string, scope: ReadScope) => {
 
   const attendanceById = await attendanceModel.findById(_id);
   if (!attendanceById) throw new AppError(MESSAGES.ATTENDANCE_NOT_FOUND, StatusCode.NOT_FOUND);
-  if (!scope.canReadAll && attendanceById.employeeId.toString() !== scope.ownEmployeeId) {
+  if (!canAccessEmployee(scope, attendanceById.employeeId.toString())) {
     throw new AppError(MESSAGES.NOT_AUTHORIZED, StatusCode.FORBIDDEN);
   }
-  await attendanceById.populate("employeeId", "name email employeeCode");
+  await attendanceById.populate('employeeId', 'name email employeeCode');
   return attendanceById;
 };
 
 const getAttendanceByEmployee = async (employeeId: string, scope: ReadScope) => {
   if (!employeeId) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
-  if (!scope.canReadAll && employeeId !== scope.ownEmployeeId) {
+  if (!canAccessEmployee(scope, employeeId)) {
     throw new AppError(MESSAGES.NOT_AUTHORIZED, StatusCode.FORBIDDEN);
   }
 
-  const attendance = await attendanceModel.find({ employeeId }).populate("employeeId", "name email employeeCode");
-  if (!attendance) throw new AppError(MESSAGES.ATTENDANCE_NOT_FOUND, StatusCode.NOT_FOUND);
-  return attendance;
+  return attendanceModel
+    .find(tenantFilter({ employeeId }))
+    .populate('employeeId', 'name email employeeCode')
+    .sort({ date: -1 });
 };
 
 const getAttendanceByDate = async (date: Date, scope: ReadScope) => {
   if (!date) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const filter: Record<string, unknown> = { date };
-  if (!scope.canReadAll) filter.employeeId = scope.ownEmployeeId ?? null;
-  const attendance = await attendanceModel.find(filter).populate("employeeId", "name email employeeCode");
-  if (!attendance) throw new AppError(MESSAGES.ATTENDANCE_NOT_FOUND, StatusCode.NOT_FOUND);
-  return attendance;
+  const filter: Record<string, unknown> = tenantFilter({
+    ...scopeEmployeeFilter(scope),
+    date: dayRangeFilter(dayKey(date)),
+  });
+  return attendanceModel.find(filter).populate('employeeId', 'name email employeeCode');
 };
 
-const getAttendanceByDateRange = async (employeeId: string, startDate: Date, endDate: Date, scope: ReadScope) => {
-  if (!employeeId || !startDate || !endDate) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
-  if (!scope.canReadAll && employeeId !== scope.ownEmployeeId) {
+const getAttendanceByDateRange = async (
+  employeeId: string,
+  startDate: Date,
+  endDate: Date,
+  scope: ReadScope,
+) => {
+  if (!employeeId || !startDate || !endDate) {
+    throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+  }
+  if (!canAccessEmployee(scope, employeeId)) {
     throw new AppError(MESSAGES.NOT_AUTHORIZED, StatusCode.FORBIDDEN);
   }
 
-  const attendance = await attendanceModel.find({
-    employeeId,
-    date: { $gte: startDate, $lte: endDate },
-  }).populate("employeeId", "name email employeeCode");
-  if (!attendance) throw new AppError(MESSAGES.ATTENDANCE_NOT_FOUND, StatusCode.NOT_FOUND);
-  return attendance;
+  return attendanceModel
+    .find({
+      employeeId,
+      date: { $gte: startOfDay(dayKey(startDate)), $lte: endDate },
+    })
+    .populate('employeeId', 'name email employeeCode');
 };
 
-const updateAttendance = async (_id: string, updateData: Partial<CreateAttendanceDTO>) => {
+const updateAttendance = async (
+  _id: string,
+  updateData: Partial<CreateAttendanceDTO> & { regularizationNote?: string },
+  scope: ReadScope,
+) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const updatedAttendance = await attendanceModel.findByIdAndUpdate(_id, updateData, { returnDocument: 'after' }).populate("employeeId", "name email employeeCode");
+  const existing = await attendanceModel.findById(_id);
+  if (!existing) throw new AppError(MESSAGES.ATTENDANCE_NOT_FOUND, StatusCode.NOT_FOUND);
+  if (!canAccessEmployee(scope, existing.employeeId.toString())) {
+    throw new AppError(MESSAGES.NOT_AUTHORIZED, StatusCode.FORBIDDEN);
+  }
+
+  const updatedAttendance = await attendanceModel
+    .findByIdAndUpdate(
+      _id,
+      {
+        ...updateData,
+        ...(updateData.checkIn || updateData.checkOut
+          ? { regularized: true, ...(updateData.regularizationNote ? { regularizationNote: updateData.regularizationNote } : {}) }
+          : {}),
+      },
+      { returnDocument: 'after' },
+    )
+    .populate('employeeId', 'name email employeeCode');
   if (!updatedAttendance) throw new AppError(MESSAGES.ATTENDANCE_NOT_FOUND, StatusCode.NOT_FOUND);
 
   return updatedAttendance;
 };
 
-const deleteAttendance = async (_id: string) => {
+const deleteAttendance = async (_id: string, scope: ReadScope) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const deletedAttendance = await attendanceModel.findByIdAndDelete(_id);
+  const existing = await attendanceModel.findById(_id);
+  if (!existing) throw new AppError(MESSAGES.ATTENDANCE_NOT_FOUND, StatusCode.NOT_FOUND);
+  if (!canAccessEmployee(scope, existing.employeeId.toString())) {
+    throw new AppError(MESSAGES.NOT_AUTHORIZED, StatusCode.FORBIDDEN);
+  }
 
-  return deletedAttendance;
+  return attendanceModel.findByIdAndDelete(_id);
 };
 
 export default {

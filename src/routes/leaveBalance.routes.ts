@@ -11,6 +11,7 @@ router.get("/employee/:employeeId/type/:leaveType/year/:year", isAuthenticated, 
 router.get("/year/:year", isAuthenticated, authorize("read_LeaveBalance"), leaveBalanceController.getAllLeaveBalanceByYear);
 router.post("/", isAuthenticated, authorize("create_LeaveBalance"), leaveBalanceController.addLeaveBalance);
 router.post("/deduct", isAuthenticated, authorize("deduct_LeaveBalance"), leaveBalanceController.deductLeaveBalance);
+router.post("/accrue", isAuthenticated, authorize("update_LeaveBalance"), leaveBalanceController.accrueLeaveBalances);
 router.get("/:_id", isAuthenticated, authorize("read_LeaveBalance"), leaveBalanceController.getLeaveBalanceById);
 router.patch("/:_id", isAuthenticated, authorize("update_LeaveBalance"), leaveBalanceController.updateLeaveBalance);
 router.delete("/:_id", isAuthenticated, authorize("delete_LeaveBalance"), leaveBalanceController.deleteLeaveBalance);

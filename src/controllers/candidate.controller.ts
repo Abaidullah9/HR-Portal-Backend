@@ -6,6 +6,7 @@ import { StatusCode } from "../utils/helper/constants/enum";
 import { AppError } from "../utils/helper/AppError";
 import { CreateCandidateDTO, UpdateCandidateDTO } from "../utils/dtos/candidate.dto";
 import { PaginationQuery } from "../utils/common";
+import hireServices from "../services/hire.services";
 
 const addCandidate = async (req: Request, res: Response) => {
   try {
@@ -79,6 +80,16 @@ const updateCandidateStatus = async (req: Request, res: Response) => {
   }
 };
 
+/** Converts a hired candidate into a User invite plus an Employee record. */
+const hireCandidate = async (req: Request, res: Response) => {
+  try {
+    const data = await hireServices.hireCandidate(req.params._id as string, req.body);
+    res.status(StatusCode.CREATED).json({ success: true, message: 'Candidate hired', data });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
+
 const deleteCandidate = async (req: Request, res: Response) => {
   try {
     const { _id } = req.params;
@@ -98,5 +109,6 @@ export default {
   getCandidateByStatus,
   updateCandidate,
   updateCandidateStatus,
+  hireCandidate,
   deleteCandidate,
 };

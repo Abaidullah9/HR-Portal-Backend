@@ -6,6 +6,7 @@ import {
   validateCreateEmployee,
   validateCreateLeaveRequest,
   validateApproveRejectLeave,
+  validateCreateJobPosting,
 } from '../utils/helper/constants/validation.utils';
 
 describe('Validation Utils', () => {
@@ -70,9 +71,9 @@ describe('Validation Utils', () => {
       expect(validateCreateUser(body)).toBe('Password is required');
     });
 
-    it('should return error for missing roleId', () => {
+    it('should NOT require roleId (service defaults self-registration to Employee role)', () => {
       const body = { name: 'John', email: 'test@test.com', password: '123456' };
-      expect(validateCreateUser(body)).toBe('Role ID is required');
+      expect(validateCreateUser(body)).toBeNull();
     });
 
     it('should return error for invalid email', () => {
@@ -139,8 +140,8 @@ describe('Validation Utils', () => {
       expect(validateApproveRejectLeave({ leaveStatus: 'invalid' })).toBe('Leave status must be \'approved\' or \'rejected\'');
     });
 
-    it('should return error for missing approvedById', () => {
-      expect(validateApproveRejectLeave({ leaveStatus: 'approved' })).toBe('Approved by ID is required');
+    it('should not require approvedById in the body (server derives it from auth)', () => {
+      expect(validateApproveRejectLeave({ leaveStatus: 'approved' })).toBeNull();
     });
 
     it('should return error for rejected without reason', () => {
@@ -156,6 +157,33 @@ describe('Validation Utils', () => {
     it('should return null for valid rejected leave with reason', () => {
       const body = { leaveStatus: 'rejected', approvedById: 'user1', rejectionReason: 'Busy period' };
       expect(validateApproveRejectLeave(body)).toBeNull();
+    });
+  });
+
+  describe('validateCreateJobPosting', () => {
+    it('should return error for missing position', () => {
+      const body = { departmentId: 'dept1', description: 'desc' };
+      expect(validateCreateJobPosting(body)).toBe('Position is required');
+    });
+
+    it('should return error for missing departmentId', () => {
+      const body = { position: 'Engineer', description: 'desc' };
+      expect(validateCreateJobPosting(body)).toBe('Department is required');
+    });
+
+    it('should return error for missing description', () => {
+      const body = { position: 'Engineer', departmentId: 'dept1' };
+      expect(validateCreateJobPosting(body)).toBe('Description is required');
+    });
+
+    it('should return error for non-positive openings', () => {
+      const body = { position: 'Engineer', departmentId: 'dept1', description: 'desc', numberOfOpenings: 0 };
+      expect(validateCreateJobPosting(body)).toBe('Number of openings must be a positive integer');
+    });
+
+    it('should return null for valid payload without postedBy (server derives it)', () => {
+      const body = { position: 'Engineer', departmentId: 'dept1', description: 'desc', numberOfOpenings: 2 };
+      expect(validateCreateJobPosting(body)).toBeNull();
     });
   });
 });

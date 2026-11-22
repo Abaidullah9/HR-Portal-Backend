@@ -7,11 +7,13 @@ import { AppError } from "../utils/helper/AppError";
 import { CreateLeaveRequestDTO, UpdateLeaveRequestDTO, ApproveRejectLeaveDTO } from "../utils/dtos/leaveRequest.dto";
 import { PaginationQuery } from "../utils/common";
 import { resolveReadScope } from "../utils/helper/ownership";
+import { recordAudit } from "../utils/helper/audit";
 
 const addLeaveRequest = async (req: Request, res: Response) => {
   try {
     const body: CreateLeaveRequestDTO = req.body;
-    const newRequest = await leaveRequestServices.addLeaveRequest(body);
+    const scope = await resolveReadScope(req.userId!);
+    const newRequest = await leaveRequestServices.addLeaveRequest(body, scope);
     if (!newRequest) throw new AppError(MESSAGES.FAILED_TO_CREATE_LEAVE_REQUEST, StatusCode.INTERNAL_SERVER_ERROR);
     res.status(StatusCode.CREATED).json({ success: true, message: MESSAGES.LEAVE_REQUEST_ADDED_SUCCESSFULLY, data: newRequest });
   } catch (error) {
@@ -22,7 +24,10 @@ const addLeaveRequest = async (req: Request, res: Response) => {
 const getAllLeaveRequest = async (req: Request, res: Response) => {
   try {
     const scope = await resolveReadScope(req.userId!);
-    const { data, pagination } = await leaveRequestServices.getAllLeaveRequest(req.query as PaginationQuery, scope);
+    const { data, pagination } = await leaveRequestServices.getAllLeaveRequest(
+      req.query as PaginationQuery & { status?: string },
+      scope,
+    );
     res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ALL_LEAVE_REQUESTS_FETCHED_SUCCESSFULLY, data, pagination });
   } catch (error) {
     sendErrorResponse(res, error);
@@ -102,8 +107,16 @@ const updateLeaveRequest = async (req: Request, res: Response) => {
 const approveRejectLeave = async (req: Request, res: Response) => {
   try {
     const { _id } = req.params;
-    const approvalData: ApproveRejectLeaveDTO = req.body;
-    const result = await leaveRequestServices.approveRejectLeave(_id as string, approvalData);
+    // approvedById always comes from the authenticated user, never the client body
+    const approvalData: ApproveRejectLeaveDTO = { ...req.body, approvedById: req.userId! };
+    const scope = await resolveReadScope(req.userId!);
+    const result = await leaveRequestServices.approveRejectLeave(_id as string, approvalData, scope);
+    await recordAudit(req.userId, {
+      action: `leave.${approvalData.leaveStatus}`,
+      entity: 'LeaveRequest',
+      entityId: _id as string,
+      detail: approvalData.rejectionReason ? `reason: ${approvalData.rejectionReason}` : undefined,
+    });
     res.status(StatusCode.OK).json({ success: true, message: MESSAGES.LEAVE_REQUEST_UPDATED_SUCCESSFULLY, data: result });
   } catch (error) {
     sendErrorResponse(res, error);

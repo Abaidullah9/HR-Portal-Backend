@@ -12,6 +12,8 @@ export interface IEmployee extends Document {
   position: string;
   employmentType: 'full-time' | 'contract' | 'intern';
   isActive : boolean;
+  /** Monthly base salary, the source for generated payroll records. */
+  salary?: number;
   joiningDate: Date;
   exitDate?: Date;
 }
@@ -26,6 +28,7 @@ const employeeSchema = new Schema<IEmployee>({
   position: { type: String, required: true, index: true },
   employmentType: { type: String, enum: ['full-time', 'contract', 'intern'], required: true },
   isActive: { type:Boolean, default: true, index: true },
+  salary: { type: Number, min: 0 },
   joiningDate: { type: Date, required: true, index: true },
   exitDate: { type: Date }
 }, { timestamps: true });

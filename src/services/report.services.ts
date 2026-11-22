@@ -9,6 +9,7 @@ const addReport = async (reportData: CreateReportDTO) => {
   if (!reportData) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
   const newReport = await reportModel.create(reportData);
+  await newReport.populate("generatedBy", "name email employeeCode");
   return newReport;
 };
 

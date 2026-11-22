@@ -3,6 +3,7 @@ dotenv.config();
 
 import app from "./app";
 import connectDB from "./config/db";
+import { startSchedulers } from "./utils/scheduler";
 
 const PORT = process.env.PORT || 3001;
 
@@ -11,6 +12,7 @@ const startServer = async () => {
     await connectDB();
     const server = app.listen(PORT, () => {
       console.log(`[Server] Running on http://localhost:${PORT}`);
+      startSchedulers();
     });
   } catch (error) {
     console.error("[Server] Failed to start:", error);

@@ -5,6 +5,7 @@ export interface CreateLeaveBalanceDTO {
   used?: number;
   remaining?: number;
   year: number;
+  accrualRate?: number;
 }
 
 export interface UpdateLeaveBalanceDTO {

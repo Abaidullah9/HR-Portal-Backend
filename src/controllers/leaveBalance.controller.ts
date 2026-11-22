@@ -103,8 +103,18 @@ const deleteLeaveBalance = async (req: Request, res: Response) => {
   }
 };
 
+const accrueLeaveBalances = async (_req: Request, res: Response) => {
+  try {
+    const data = await leaveBalanceServices.accrueLeaveBalances();
+    res.status(StatusCode.OK).json({ success: true, message: "Leave accrual posted", data });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
+
 export default {
   addLeaveBalance,
+  accrueLeaveBalances,
   getAllLeaveBalance,
   getLeaveBalanceById,
   getLeaveBalancesByEmployee,

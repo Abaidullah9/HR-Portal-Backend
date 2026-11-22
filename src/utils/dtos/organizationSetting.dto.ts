@@ -4,6 +4,7 @@ export interface CreateOrganizationSettingDTO {
   phone?: string;
   address?: string;
   workingDays?: number[];
+  lateAfter?: string;
   logoUrl?: string;
 }
 
@@ -13,5 +14,6 @@ export interface UpdateOrganizationSettingDTO {
   phone?: string;
   address?: string;
   workingDays?: number[];
+  lateAfter?: string;
   logoUrl?: string;
 }

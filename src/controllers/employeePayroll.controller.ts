@@ -6,6 +6,8 @@ import { StatusCode } from "../utils/helper/constants/enum";
 import { AppError } from "../utils/helper/AppError";
 import { CreatePayrollDTO, UpdatePayrollDTO } from "../utils/dtos/employeePayroll.dto";
 import { PaginationQuery } from "../utils/common";
+import { recordAudit } from "../utils/helper/audit";
+import { resolveReadScope } from "../utils/helper/ownership";
 
 const addPayroll = async (req: Request, res: Response) => {
   try {
@@ -20,7 +22,8 @@ const addPayroll = async (req: Request, res: Response) => {
 
 const getAllPayroll = async (req: Request, res: Response) => {
   try {
-    const { data, pagination } = await employeePayrollServices.getAllPayroll(req.query as PaginationQuery);
+    const scope = await resolveReadScope(req.userId!);
+    const { data, pagination } = await employeePayrollServices.getAllPayroll(req.query as PaginationQuery, scope);
     res.status(StatusCode.OK).json({ success: true, message: MESSAGES.ALL_PAYROLL_FETCHED_SUCCESSFULLY, data, pagination });
   } catch (error) {
     sendErrorResponse(res, error);
@@ -30,7 +33,8 @@ const getAllPayroll = async (req: Request, res: Response) => {
 const getPayrollById = async (req: Request, res: Response) => {
   try {
     const { _id } = req.params;
-    const result = await employeePayrollServices.getPayrollById(_id as string);
+    const scope = await resolveReadScope(req.userId!);
+    const result = await employeePayrollServices.getPayrollById(_id as string, scope);
     res.status(StatusCode.OK).json({ success: true, message: MESSAGES.PAYROLL_FETCHED_SUCCESSFULLY, data: result });
   } catch (error) {
     sendErrorResponse(res, error);
@@ -40,7 +44,8 @@ const getPayrollById = async (req: Request, res: Response) => {
 const getPayrollByEmployee = async (req: Request, res: Response) => {
   try {
     const { employeeId } = req.params;
-    const result = await employeePayrollServices.getPayrollByEmployee(employeeId as string);
+    const scope = await resolveReadScope(req.userId!);
+    const result = await employeePayrollServices.getPayrollByEmployee(employeeId as string, scope);
     res.status(StatusCode.OK).json({ success: true, message: MESSAGES.PAYROLL_FETCHED_SUCCESSFULLY, data: result });
   } catch (error) {
     sendErrorResponse(res, error);
@@ -98,6 +103,11 @@ const updatePayrollStatus = async (req: Request, res: Response) => {
     const { _id } = req.params;
     const { status }: { status: string } = req.body;
     const result = await employeePayrollServices.updatePayrollStatus(_id as string, status as 'completed' | 'failed' | 'pending');
+    await recordAudit(req.userId, {
+      action: `payroll.${status}`,
+      entity: 'EmployeePayroll',
+      entityId: _id as string,
+    });
     res.status(StatusCode.OK).json({ success: true, message: MESSAGES.PAYROLL_UPDATED_SUCCESSFULLY, data: result });
   } catch (error) {
     sendErrorResponse(res, error);
@@ -115,7 +125,28 @@ const deletePayroll = async (req: Request, res: Response) => {
   }
 };
 
+const getPayslip = async (req: Request, res: Response) => {
+  try {
+    const scope = await resolveReadScope(req.userId!);
+    const data = await employeePayrollServices.getPayslip(req.params._id as string, scope);
+    res.status(StatusCode.OK).json({ success: true, message: "Payslip fetched", data });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
+
+const getOwnPayslips = async (req: Request, res: Response) => {
+  try {
+    const data = await employeePayrollServices.getOwnPayslips(req.userId!);
+    res.status(StatusCode.OK).json({ success: true, message: "Payslips fetched", data });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
+
 export default {
+  getPayslip,
+  getOwnPayslips,
   addPayroll,
   getAllPayroll,
   getPayrollById,

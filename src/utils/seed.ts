@@ -240,11 +240,13 @@ async function seedDatabase() {
     const orgSettings = await OrganizationSetting.findOne();
     const orgId = orgSettings!._id;
 
+    // Users carry the tenant too: request context derives organizationId from
+    // the session user, and employee queries are scoped by it.
     const users = await User.insertMany([
-      { name: 'Alice Admin', email: 'admin@techcorp.com', password: hashedPassword, roleId: roles[0]!._id, isActive: true },
-      { name: 'Bob HR', email: 'hr@techcorp.com', password: hashedPassword, roleId: roles[1]!._id, isActive: true },
-      { name: 'Charlie Manager', email: 'manager@techcorp.com', password: hashedPassword, roleId: roles[2]!._id, isActive: true },
-      { name: 'Diana Employee', email: 'employee@techcorp.com', password: hashedPassword, roleId: roles[3]!._id, isActive: true },
+      { name: 'Alice Admin', email: 'admin@techcorp.com', password: hashedPassword, roleId: roles[0]!._id, organizationId: orgId, isActive: true },
+      { name: 'Bob HR', email: 'hr@techcorp.com', password: hashedPassword, roleId: roles[1]!._id, organizationId: orgId, isActive: true },
+      { name: 'Charlie Manager', email: 'manager@techcorp.com', password: hashedPassword, roleId: roles[2]!._id, organizationId: orgId, isActive: true },
+      { name: 'Diana Employee', email: 'employee@techcorp.com', password: hashedPassword, roleId: roles[3]!._id, organizationId: orgId, isActive: true },
     ]);
 
     console.log('🌱 Seeding Employees...');
@@ -300,6 +302,7 @@ async function seedDatabase() {
     });
 
     const candidate = await Candidate.create({
+      organizationId: orgId,
       jobPostingId: jobPosting._id,
       name: 'Evan Candidate',
       email: 'evan@example.com',
@@ -322,6 +325,7 @@ async function seedDatabase() {
 
     console.log('🌱 Seeding Leave Balances & Requests...');
     await LeaveBalance.create({
+      organizationId: orgId,
       employeeId: employeeEmp._id,
       leaveType: 'vacation',
       totalAllocated: 20,
@@ -331,6 +335,7 @@ async function seedDatabase() {
     });
 
     await LeaveRequest.create({
+      organizationId: orgId,
       employeeId: employeeEmp._id,
       leaveType: 'vacation',
       fromDate: new Date('2024-12-20'),
@@ -343,6 +348,7 @@ async function seedDatabase() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     await Attendance.create({
+      organizationId: orgId,
       employeeId: employeeEmp._id,
       date: today,
       checkIn: new Date(today.getTime() + 9 * 60 * 60 * 1000),
@@ -357,6 +363,7 @@ async function seedDatabase() {
     currentMonthEnd.setDate(0);
 
     await EmployeePayroll.create({
+      organizationId: orgId,
       employeeId: employeeEmp._id,
       baseSalary: 7916.67,
       allowances: [{ type: 'transport', amount: 200, taxable: false }],
@@ -371,6 +378,7 @@ async function seedDatabase() {
 
     console.log('🌱 Seeding Appraisals & Feedback...');
     await Appraisal.create({
+      organizationId: orgId,
       employeeId: employeeEmp._id,
       cycleId: cycle._id,
       appraiserId: managerEmp._id,
@@ -418,6 +426,7 @@ async function seedDatabase() {
 
     console.log('🌱 Seeding Documents...');
     await EmployeeDocument.create({
+      organizationId: orgId,
       employeeId: employeeEmp._id,
       name: 'Diana Contract.pdf',
       type: 'contract',

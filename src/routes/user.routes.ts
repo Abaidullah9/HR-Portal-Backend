@@ -8,9 +8,13 @@ import { MESSAGES } from "../utils/helper/constants/messages";
 import { StatusCode } from "../utils/helper/constants/enum";
 import userController from "../controllers/user.controller";
 
+// Only failed sign-ins count. Counting successes locked out every user behind a
+// shared address after five ordinary logins in fifteen minutes, which is normal
+// traffic, not an attack.
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
+  skipSuccessfulRequests: true,
   statusCode: StatusCode.TOO_MANY_REQUESTS,
   message: { success: false, message: MESSAGES.LOGIN_ATTEMPTS_EXCEEDED },
 });

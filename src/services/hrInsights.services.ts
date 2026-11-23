@@ -119,6 +119,7 @@ const workforceToday = async (dateInput?: string) => workforceServices.workforce
 /** Payroll totals across every record, not just the loaded page. */
 const payrollSummary = async () => {
   const [totals] = await payrollModel.aggregate([
+    { $match: tenantFilter() },
     {
       $group: {
         _id: null,

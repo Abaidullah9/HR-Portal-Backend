@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'async_hooks';
+import { Types } from 'mongoose';
 
 /**
  * Per-request context.
@@ -38,6 +39,18 @@ export const setContextOrganization = (organizationId?: string): void => {
 export const contextOrganizationId = (): string | undefined => storage.getStore()?.organizationId;
 
 /**
+ * The organisation as a query value. The auth middleware stores it as a string,
+ * which Mongoose casts for `find`/`countDocuments` but not inside an
+ * aggregation pipeline — there a string never equals the stored ObjectId and the
+ * match silently returns nothing. So filters carry a real ObjectId.
+ */
+const organizationIdValue = (): Types.ObjectId | string | null => {
+  const id = storage.getStore()?.organizationId;
+  if (!id) return null;
+  return Types.ObjectId.isValid(id) ? new Types.ObjectId(id) : id;
+};
+
+/**
  * Adds the caller's organisation to a query filter. Outside a request (seed
  * scripts, tests, background jobs) it is a no-op, so those paths keep working on
  * the whole database; inside a request a missing organisation matches nothing,
@@ -51,7 +64,7 @@ export const contextOrganizationId = (): string | undefined => storage.getStore(
 export const tenantFilter = <T extends Record<string, unknown>>(filter: T = {} as T): any => {
   const context = storage.getStore();
   if (!context) return filter;
-  return { ...filter, organizationId: context.organizationId ?? null };
+  return { ...filter, organizationId: organizationIdValue() };
 };
 
 /** Adds the caller's organisation to a document being created. */
@@ -59,5 +72,5 @@ export const tenantFilter = <T extends Record<string, unknown>>(filter: T = {} a
 export const tenantFields = (): Record<string, any> => {
   const context = storage.getStore();
   if (!context || !context.organizationId) return {};
-  return { organizationId: context.organizationId };
+  return { organizationId: organizationIdValue() };
 };

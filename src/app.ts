@@ -37,6 +37,12 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 // Uploaded documents are served by an authenticated controller, never from a
 // static mount: a contract or ID scan must not be readable by URL alone.
 app.use(auditMutations);
+// Every API response is personalized by session or role; a cached/304 reply
+// would expose stale data and break clients that expect a JSON body.
+app.use("/api/v1", (_req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  next();
+});
 app.use("/api/v1", apiRouter);
 app.use(errorHandler);
 

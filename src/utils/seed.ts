@@ -339,8 +339,8 @@ async function seedDatabase() {
       employeeId: employeeEmp._id,
       leaveType: 'vacation',
       totalAllocated: 20,
-      used: 3,
-      remaining: 17,
+      used: 12,
+      remaining: 8,
       year: 2024
     });
 

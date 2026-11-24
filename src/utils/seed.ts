@@ -127,6 +127,7 @@ async function seedDatabase() {
 
       // Payroll module
       { actionName: 'read_Payroll', actionDescription: 'View payroll records' },
+      { actionName: 'read_OwnPayslip', actionDescription: 'View own payslips' },
       { actionName: 'create_Payroll', actionDescription: 'Create payroll record' },
       { actionName: 'update_Payroll', actionDescription: 'Update payroll record' },
       { actionName: 'update_PayrollStatus', actionDescription: 'Update payroll status' },
@@ -223,18 +224,23 @@ async function seedDatabase() {
       .filter(a => managerModules.some(m => a.actionName.endsWith(`_${m}`)))
       .map(a => a._id);
     // Employee gets: LeaveRequest, Feedback, Document, Attendance (but NOT approveReject).
-    // Self-service views are authorised on actions Employee already holds, so no
-    // extra read grants are needed here.
     const employeeModules = ['LeaveRequest', 'Feedback', 'Document', 'Attendance'];
     const employeeActionIds = actionDocs
       .filter(a => employeeModules.some(m => a.actionName.endsWith(`_${m}`)) && a.actionName !== 'approveReject_LeaveRequest')
       .map(a => a._id);
+    // Self-service grants: every role may read the caller's own records. The
+    // names deliberately lack a `_Module` suffix, so no module-wide grant picks
+    // them up by accident.
+    const selfServiceActions = ['read_OwnPayslip'];
+    const selfServiceActionIds = actionDocs
+      .filter(a => selfServiceActions.includes(a.actionName))
+      .map(a => a._id);
 
     const roles = await Role.insertMany([
       { roleName: 'Admin', actions: adminActionIds },
-      { roleName: 'HR', actions: hrActionIds },
-      { roleName: 'Manager', actions: managerActionIds },
-      { roleName: 'Employee', actions: employeeActionIds },
+      { roleName: 'HR', actions: [...hrActionIds, ...selfServiceActionIds] },
+      { roleName: 'Manager', actions: [...managerActionIds, ...selfServiceActionIds] },
+      { roleName: 'Employee', actions: [...employeeActionIds, ...selfServiceActionIds] },
     ]);
 
     console.log('🌱 Seeding Departments...');

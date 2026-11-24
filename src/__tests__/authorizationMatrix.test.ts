@@ -141,13 +141,20 @@ const moduleList = (name: string): string[] => {
 const grantsByModule = (modules: string[]): string[] =>
   ACTION_CATALOGUE.filter((action) => modules.some((module) => action.endsWith(`_${module}`)));
 
+// Every role also holds the self-service grants, which are named without a
+// module suffix so the module-wide filters above never pick them up.
+const selfServiceGrants = moduleList('selfServiceActions');
+
 const ROLE_GRANTS: Record<string, string[]> = {
   Admin: [...ACTION_CATALOGUE],
-  HR: grantsByModule(moduleList('hrModules')),
-  Manager: grantsByModule(moduleList('managerModules')),
-  Employee: grantsByModule(moduleList('employeeModules')).filter(
-    (action) => action !== 'approveReject_LeaveRequest',
-  ),
+  HR: [...grantsByModule(moduleList('hrModules')), ...selfServiceGrants],
+  Manager: [...grantsByModule(moduleList('managerModules')), ...selfServiceGrants],
+  Employee: [
+    ...grantsByModule(moduleList('employeeModules')).filter(
+      (action) => action !== 'approveReject_LeaveRequest',
+    ),
+    ...selfServiceGrants,
+  ],
 };
 
 const ROLE_NAMES = Object.keys(ROLE_GRANTS);

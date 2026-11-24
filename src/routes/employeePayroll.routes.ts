@@ -7,8 +7,8 @@ const router = Router();
 
 router.get("/paginated", isAuthenticated, authorize("read_Payroll"), employeePayrollController.getAllPayroll);
 // Self-service payslips: the employee comes from the session, and every seeded
-// role holds read_LeaveRequest, which keeps this off an HR-only grant.
-router.get("/me", isAuthenticated, authorize("read_LeaveRequest"), employeePayrollController.getOwnPayslips);
+// role holds read_OwnPayslip, which keeps this off an HR-only grant.
+router.get("/me", isAuthenticated, authorize("read_OwnPayslip"), employeePayrollController.getOwnPayslips);
 router.get("/:_id/payslip", isAuthenticated, authorize("read_Payroll"), employeePayrollController.getPayslip);
 router.get("/employee/:employeeId", isAuthenticated, authorize("read_Payroll"), employeePayrollController.getPayrollByEmployee);
 router.get("/pay-period", isAuthenticated, authorize("read_Payroll"), employeePayrollController.getPayrollByPayPeriod);

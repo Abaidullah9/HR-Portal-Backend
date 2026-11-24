@@ -24,6 +24,14 @@ import Team from '../models/team.model';
 import Report from '../models/report.model';
 import EmployeeDocument from '../models/document.model';
 import AuditLog from '../models/auditLog.model';
+import PayrollRun from '../models/payrollRun.model';
+import Compensation from '../models/compensation.model';
+import Holiday from '../models/holiday.model';
+import Goal from '../models/goal.model';
+import Notification from '../models/notification.model';
+import ChecklistTask from '../models/checklistTask.model';
+import ChecklistTemplate from '../models/checklistTemplate.model';
+import { dayKey } from './dates';
 
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/HR-DB';
 
@@ -340,8 +348,8 @@ async function seedDatabase() {
       organizationId: orgId,
       employeeId: employeeEmp._id,
       leaveType: 'vacation',
-      fromDate: new Date('2024-12-20'),
-      toDate: new Date('2024-12-24'),
+      fromDate: new Date(Date.now() + 10 * 86400000),
+      toDate: new Date(Date.now() + 14 * 86400000),
       leaveStatus: 'pending',
       reasonForLeave: 'Winter holiday trip'
     });
@@ -436,6 +444,335 @@ async function seedDatabase() {
       uploadedBy: users[1]!._id
     });
 
+    // Extra people, one per access pattern the UI and the authorisation rules
+    // care about: HR with an employee record, a second direct report of the
+    // manager, and an employee in another department who reports to nobody.
+    console.log('🌱 Seeding Additional People...');
+    const hrEmp = await Employee.create({
+      organizationId: orgId,
+      userId: users[1]!._id,
+      employeeCode: 'EMP-0003',
+      name: 'Bob HR',
+      email: 'hr@techcorp.com',
+      departmentId: departments[1]!._id,
+      position: 'HR Business Partner',
+      employmentType: 'full-time',
+      salary: 8200,
+      isActive: true,
+      joiningDate: new Date('2021-06-01'),
+    });
+
+    const samUser = await User.create({
+      name: 'Sam Rivera',
+      email: 'sam@techcorp.com',
+      password: hashedPassword,
+      roleId: roles[3]!._id,
+      organizationId: orgId,
+      isActive: true,
+    });
+
+    const samEmp = await Employee.create({
+      organizationId: orgId,
+      userId: samUser._id,
+      employeeCode: 'EMP-0004',
+      name: 'Sam Rivera',
+      email: 'sam@techcorp.com',
+      departmentId: departments[0]!._id,
+      reportingManagerId: managerEmp._id,
+      position: 'Frontend Engineer',
+      employmentType: 'full-time',
+      salary: 6400,
+      isActive: true,
+      joiningDate: new Date('2024-02-05'),
+    });
+
+    const priyaUser = await User.create({
+      name: 'Priya Patel',
+      email: 'priya@techcorp.com',
+      password: hashedPassword,
+      roleId: roles[3]!._id,
+      organizationId: orgId,
+      isActive: true,
+    });
+
+    // Reports to nobody: this is the "unrelated colleague" that the ownership
+    // checks must refuse to a manager and to another employee.
+    const priyaEmp = await Employee.create({
+      organizationId: orgId,
+      userId: priyaUser._id,
+      employeeCode: 'EMP-0005',
+      name: 'Priya Patel',
+      email: 'priya@techcorp.com',
+      departmentId: departments[2]!._id,
+      position: 'Account Executive',
+      employmentType: 'full-time',
+      salary: 5600,
+      isActive: true,
+      joiningDate: new Date('2023-09-18'),
+    });
+
+    console.log('🌱 Seeding Compensation History...');
+    const compensationRows = [
+      { employeeId: managerEmp._id, baseSalary: 9000, effectiveFrom: '2022-01-15', reason: 'initial' as const },
+      { employeeId: managerEmp._id, baseSalary: 9500, effectiveFrom: '2024-04-01', reason: 'raise' as const },
+      { employeeId: employeeEmp._id, baseSalary: 7400, effectiveFrom: '2023-03-10', reason: 'initial' as const },
+      { employeeId: employeeEmp._id, baseSalary: 7916.67, effectiveFrom: '2024-04-01', reason: 'raise' as const },
+      { employeeId: hrEmp._id, baseSalary: 8200, effectiveFrom: '2021-06-01', reason: 'initial' as const },
+      { employeeId: samEmp._id, baseSalary: 6400, effectiveFrom: '2024-02-05', reason: 'initial' as const },
+      { employeeId: priyaEmp._id, baseSalary: 5600, effectiveFrom: '2023-09-18', reason: 'initial' as const },
+    ];
+    await Compensation.insertMany(
+      compensationRows.map((row) => ({ ...row, organizationId: orgId, currency: 'USD', createdBy: users[1]!._id })),
+    );
+
+    console.log('🌱 Seeding Holidays...');
+    const thisYear = new Date().getFullYear();
+    await Holiday.insertMany([
+      { organizationId: orgId, name: "New Year's Day", date: `${thisYear}-01-01`, paid: true },
+      { organizationId: orgId, name: 'Founders Day', date: `${thisYear}-06-12`, paid: true },
+      { organizationId: orgId, name: 'Christmas Day', date: `${thisYear}-12-25`, paid: true },
+    ]);
+
+    console.log('🌱 Seeding Leave Balances...');
+    const balanceRows = [
+      { employeeId: employeeEmp._id, leaveType: 'vacation', totalAllocated: 20, used: 3 },
+      { employeeId: employeeEmp._id, leaveType: 'sick', totalAllocated: 10, used: 1 },
+      { employeeId: samEmp._id, leaveType: 'vacation', totalAllocated: 18, used: 2 },
+      { employeeId: samEmp._id, leaveType: 'sick', totalAllocated: 10, used: 0 },
+      { employeeId: priyaEmp._id, leaveType: 'vacation', totalAllocated: 15, used: 5 },
+      { employeeId: priyaEmp._id, leaveType: 'sick', totalAllocated: 10, used: 3 },
+    ];
+    await LeaveBalance.insertMany(
+      balanceRows.map((row) => ({
+        ...row,
+        organizationId: orgId,
+        remaining: row.totalAllocated - row.used,
+        year: thisYear,
+      })),
+    );
+
+    console.log('🌱 Seeding More Leave Requests...');
+    const daysFromNow = (days: number) => {
+      const date = new Date();
+      date.setHours(0, 0, 0, 0);
+      date.setDate(date.getDate() + days);
+      return date;
+    };
+
+    // Approved: shows the balance deduction and fills the team calendar.
+    await LeaveRequest.create({
+      organizationId: orgId,
+      employeeId: samEmp._id,
+      leaveType: 'vacation',
+      fromDate: daysFromNow(-18),
+      toDate: daysFromNow(-16),
+      leaveStatus: 'approved',
+      approvedById: managerEmp._id,
+      reasonForLeave: 'Family trip',
+      workingDays: 3,
+    });
+
+    // Pending from the unrelated colleague: a manager must not see this one.
+    await LeaveRequest.create({
+      organizationId: orgId,
+      employeeId: priyaEmp._id,
+      leaveType: 'sick',
+      fromDate: daysFromNow(6),
+      toDate: daysFromNow(7),
+      leaveStatus: 'pending',
+      reasonForLeave: 'Medical appointment',
+      workingDays: 2,
+    });
+
+    // Cancelled: the refund path and the cancelled filter both need a row.
+    await LeaveRequest.create({
+      organizationId: orgId,
+      employeeId: employeeEmp._id,
+      leaveType: 'vacation',
+      fromDate: daysFromNow(-40),
+      toDate: daysFromNow(-38),
+      leaveStatus: 'cancelled',
+      reasonForLeave: 'Plans changed',
+      workingDays: 3,
+    });
+
+    console.log('🌱 Seeding Attendance History...');
+    const attendanceRows: Record<string, unknown>[] = [];
+    for (const employee of [managerEmp, employeeEmp, hrEmp, samEmp, priyaEmp]) {
+      for (let offset = 0; offset < 5; offset += 1) {
+        const date = daysFromNow(-offset - 1);
+        attendanceRows.push({
+          organizationId: orgId,
+          employeeId: employee._id,
+          date,
+          dateKey: dayKey(date),
+          checkIn: new Date(date.getTime() + 9 * 60 * 60 * 1000),
+          checkOut: new Date(date.getTime() + 17 * 60 * 60 * 1000),
+        });
+      }
+    }
+    await Attendance.insertMany(attendanceRows);
+
+    console.log('🌱 Seeding Payroll Run...');
+    const periodStart = currentMonthStart.toISOString().slice(0, 10);
+    const periodEnd = currentMonthEnd.toISOString().slice(0, 10);
+    const payrollRun = await PayrollRun.create({
+      organizationId: orgId,
+      periodStart,
+      periodEnd,
+      status: 'draft',
+      employeeCount: 5,
+      totalNetPay: 9500 + 7916.67 + 8200 + 6400 + 5600,
+      currency: 'USD',
+      createdBy: users[1]!._id,
+      notes: 'Seed data: a draft run for approving, paying and reversing.',
+    });
+
+    await EmployeePayroll.insertMany(
+      [
+        { employeeId: managerEmp._id, baseSalary: 9500 },
+        { employeeId: employeeEmp._id, baseSalary: 7916.67 },
+        { employeeId: hrEmp._id, baseSalary: 8200 },
+        { employeeId: samEmp._id, baseSalary: 6400 },
+        { employeeId: priyaEmp._id, baseSalary: 5600 },
+      ].map((row) => ({
+        organizationId: orgId,
+        employeeId: row.employeeId,
+        payRunId: payrollRun._id,
+        baseSalary: row.baseSalary,
+        allowances: [],
+        deductions: [],
+        bonuses: [],
+        netPay: row.baseSalary,
+        payPeriodStart: currentMonthStart,
+        payPeriodEnd: currentMonthEnd,
+        paymentMethod: 'bank transfer',
+        status: 'pending',
+      })),
+    );
+
+    console.log('🌱 Seeding Goals...');
+    await Goal.insertMany([
+      {
+        organizationId: orgId,
+        employeeId: employeeEmp._id,
+        cycleId: cycle._id,
+        title: 'Ship the reporting module',
+        description: 'Deliver the reports page with export.',
+        successCriteria: 'Reports page live with CSV export',
+        progress: 60,
+        status: 'in_progress',
+        dueDate: `${thisYear}-12-31`,
+        weight: 40,
+        createdBy: users[2]!._id,
+      },
+      {
+        organizationId: orgId,
+        employeeId: employeeEmp._id,
+        cycleId: cycle._id,
+        title: 'Mentor a junior engineer',
+        description: 'Weekly pairing with Sam.',
+        progress: 30,
+        status: 'in_progress',
+        weight: 20,
+        createdBy: users[2]!._id,
+      },
+      {
+        organizationId: orgId,
+        employeeId: samEmp._id,
+        cycleId: cycle._id,
+        title: 'Own the design system',
+        progress: 10,
+        status: 'not_started',
+        weight: 30,
+        createdBy: users[2]!._id,
+      },
+      {
+        organizationId: orgId,
+        employeeId: priyaEmp._id,
+        cycleId: cycle._id,
+        title: 'Close enterprise pipeline',
+        progress: 100,
+        status: 'completed',
+        weight: 50,
+        createdBy: users[2]!._id,
+      },
+    ]);
+
+    console.log('🌱 Seeding Onboarding Checklists...');
+    await ChecklistTemplate.insertMany(
+      [
+        { title: 'Collect signed employment contract', category: 'compliance' as const, dueOffsetDays: 0 },
+        { title: 'Create work email and system accounts', category: 'it' as const, dueOffsetDays: 0 },
+        { title: 'Assign a buddy and first-week schedule', category: 'manager' as const, dueOffsetDays: 1 },
+      ].map((template) => ({ ...template, organizationId: orgId, type: 'onboarding' as const, active: true })),
+    );
+
+    await ChecklistTask.insertMany([
+      {
+        organizationId: orgId,
+        employeeId: samEmp._id,
+        type: 'onboarding',
+        title: 'Create work email and system accounts',
+        category: 'it',
+        status: 'open',
+        dueDate: dayKey(daysFromNow(-2)),
+        ownerId: users[1]!._id,
+      },
+      {
+        organizationId: orgId,
+        employeeId: samEmp._id,
+        type: 'onboarding',
+        title: 'Collect signed employment contract',
+        category: 'compliance',
+        status: 'done',
+        dueDate: dayKey(daysFromNow(-3)),
+        ownerId: users[1]!._id,
+        completedAt: daysFromNow(-3),
+        completedBy: users[1]!._id,
+      },
+    ]);
+
+    console.log('🌱 Seeding Peer Feedback...');
+    await Feedback.create({
+      targetEmployeeId: priyaEmp._id,
+      reviewerId: samEmp._id,
+      cycleId: cycle._id,
+      relationship: 'peer',
+      comment: 'Great partner on the Q4 launch; kept the customer list clean.',
+      rating: 4,
+      date: daysFromNow(-7),
+    });
+
+    console.log('🌱 Seeding More Documents...');
+    await EmployeeDocument.insertMany([
+      {
+        organizationId: orgId,
+        employeeId: samEmp._id,
+        name: 'Sam ID Proof.pdf',
+        type: 'id_proof',
+        fileUrl: 'https://example.com/documents/sam_id.pdf',
+        uploadedBy: users[1]!._id,
+      },
+      {
+        organizationId: orgId,
+        employeeId: priyaEmp._id,
+        name: 'Priya Resume.pdf',
+        type: 'resume',
+        fileUrl: 'https://example.com/documents/priya_resume.pdf',
+        uploadedBy: users[1]!._id,
+      },
+    ]);
+
+    console.log('🌱 Seeding Notifications...');
+    await Notification.insertMany([
+      { userId: users[0]!._id, title: 'Payroll run needs approval', detail: `${periodStart} → ${periodEnd} is in draft.`, href: '/payroll', kind: 'payroll' },
+      { userId: users[1]!._id, title: 'Leave awaiting approval', detail: 'Priya Patel requested 2 days of sick leave.', href: '/leaves', kind: 'leave' },
+      { userId: users[1]!._id, title: 'Onboarding in progress', detail: 'Sam Rivera has 1 open onboarding task.', href: '/employees', kind: 'employee' },
+      { userId: users[2]!._id, title: 'Leave awaiting your approval', detail: 'Diana Employee requested vacation leave.', href: '/leaves', kind: 'leave' },
+      { userId: users[3]!._id, title: 'Payslip available', detail: 'Your payslip for the current period is ready.', href: '/payroll', kind: 'payroll' },
+    ]);
+
     // The audit page is part of the product, so a fresh database shows a
     // realistic trail instead of an empty state that reads like a broken screen.
     // Written through the driver collection to keep the seeded timestamps.
@@ -460,14 +797,25 @@ async function seedDatabase() {
     );
 
     console.log('🎉 Database seeded successfully!');
-    console.log('👤 Test Login: admin@techcorp.com / Password123!');
+    console.log('👤 Accounts (all use Password123!):');
+    for (const account of [
+      'admin@techcorp.com   Admin    - sees everything',
+      'hr@techcorp.com      HR       - payroll, people, leave',
+      'manager@techcorp.com Manager  - own team only',
+      'employee@techcorp.com Employee - own records only, reports to Charlie',
+      'sam@techcorp.com     Employee - reports to Charlie (manager may read)',
+      'priya@techcorp.com   Employee - Sales, no manager (other-record test)',
+    ]) {
+      console.log('   ' + account);
+    }
 
   } catch (error) {
     console.error('❌ Error seeding database:', error);
+    process.exitCode = 1;
   } finally {
     await mongoose.connection.close();
     console.log('🔌 Database connection closed.');
-    process.exit(0);
+    process.exit(process.exitCode ?? 0);
   }
 }
 

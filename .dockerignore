@@ -1,0 +1,13 @@
+node_modules
+dist
+uploads
+.env
+.env.*
+!.env.example
+.freebuff
+.vscode
+postman*.json
+*.log
+coverage
+.git
+.github

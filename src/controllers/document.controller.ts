@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import crypto from 'crypto';
 import { sendErrorResponse } from '../utils/helper/sendError';
 import path from 'path';
 import documentServices from '../services/document.services';
@@ -8,20 +9,23 @@ import { AppError } from '../utils/helper/AppError';
 import { CreateDocumentDTO, UpdateDocumentDTO } from '../utils/dtos/document.dto';
 import { PaginationQuery } from '../utils/common';
 import { resolveReadScope } from '../utils/helper/ownership';
-import { removeStoredFile, resolveStoredFile } from '../utils/storage';
-import { currentContext } from '../utils/context';
+import { removeStoredFile, resolveStoredFile, saveBuffer, signedDownloadUrl } from '../utils/storage';
 
 const addDocument = async (req: Request, res: Response) => {
+  let storedKey: string | null = null;
   try {
     if (!req.file) {
       throw new AppError(MESSAGES.FILE_REQUIRED, StatusCode.BAD_REQUEST);
     }
 
     const retentionDays = Number(process.env.DOCUMENT_RETENTION_DAYS || 0);
+    const extension = path.extname(req.file.originalname).toLowerCase();
+    const key = await saveBuffer(`${crypto.randomUUID()}${extension}`, req.file.buffer);
+    storedKey = key;
     const documentData: CreateDocumentDTO = {
       ...req.body,
-      fileUrl: req.file.filename,
-      storageKey: req.file.filename,
+      fileUrl: key,
+      storageKey: key,
       mimeType: req.file.mimetype,
       size: req.file.size,
       uploadedBy: req.userId,
@@ -38,8 +42,8 @@ const addDocument = async (req: Request, res: Response) => {
 
     res.status(StatusCode.CREATED).json({ success: true, message: MESSAGES.DOCUMENT_ADDED_SUCCESSFULLY, data: newDocument });
   } catch (error) {
-    // A rejected upload must not leave an orphan file on disk.
-    if (req.file) await removeStoredFile(req.file.filename);
+    // A rejected upload must not leave an orphan object in storage.
+    if (storedKey) await removeStoredFile(storedKey);
     sendErrorResponse(res, error);
   }
 };
@@ -76,7 +80,20 @@ const downloadDocument = async (req: Request, res: Response) => {
     const document = await documentServices.getDocumentForDownload(_id as string, scope);
 
     const key = document.storageKey || path.basename(document.fileUrl || '');
-    const filePath = key ? resolveStoredFile(key) : null;
+    if (!key) {
+      throw new AppError('The stored file for this document is missing', StatusCode.NOT_FOUND);
+    }
+
+    // Object storage hands out a short-lived signed URL after the permission
+    // check above, so the file is never public. Local storage streams instead.
+    const signed = await signedDownloadUrl(key);
+    if (signed) {
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.redirect(signed);
+      return;
+    }
+
+    const filePath = resolveStoredFile(key);
     if (!filePath) {
       throw new AppError('The stored file for this document is missing', StatusCode.NOT_FOUND);
     }
@@ -137,7 +154,6 @@ const deleteDocument = async (req: Request, res: Response) => {
     const deletedDocument = await documentServices.deleteDocument(_id as string, scope);
     if (!deletedDocument) throw new AppError(MESSAGES.DOCUMENT_NOT_FOUND, StatusCode.NOT_FOUND);
 
-    void currentContext();
     res.status(StatusCode.OK).json({ success: true, message: MESSAGES.DOCUMENT_DELETED_SUCCESSFULLY, data: deletedDocument });
   } catch (error) {
     sendErrorResponse(res, error);

@@ -1,23 +1,12 @@
 import multer from "multer";
 import path from "path";
-import fs from "fs";
 
-// Ensure uploads directory exists
-const uploadsDir = path.join(process.cwd(), "uploads");
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (_req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname));
-  },
-});
-
+/**
+ * Uploads are buffered in memory (capped at 5MB) so the storage driver decides
+ * where they land. Writing straight to disk with `diskStorage` bound the app to
+ * a single host: on a platform with ephemeral or shared storage the file and its
+ * database record ended up on different machines.
+ */
 const fileFilter = (
   _req: Express.Request,
   file: Express.Multer.File,
@@ -35,7 +24,7 @@ const fileFilter = (
 };
 
 export const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
 });

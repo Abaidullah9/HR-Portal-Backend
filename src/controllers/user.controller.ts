@@ -8,14 +8,10 @@ import { CreateUserDTO, UpdateUserDTO } from "../utils/dtos/user.dto";
 import { PaginationQuery } from "../utils/common";
 import { currentContext } from "../utils/context";
 import { generateToken } from "../utils/helper/helper.functions";
+import { sessionCookieOptions } from "../utils/cookies";
 
 const setTokenCookie = (res: Response, token: string) => {
-  res.cookie("accessToken", token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
-    maxAge: 7 * 24 * 60 * 60 * 1000, 
-  });
+  res.cookie("accessToken", token, sessionCookieOptions());
 };
 
 const registerUser = async (req: Request, res: Response) => {
@@ -44,12 +40,8 @@ const loginUser = async (req: Request, res: Response) => {
 
 const logoutUser = async (_req: Request, res: Response) => {
   try {
-    res.cookie("accessToken", "", {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
-      maxAge: 0, 
-    });
+    // Browsers match a deletion on name and path alone.
+    res.clearCookie("accessToken", { path: "/" });
     res.status(StatusCode.OK).json({ success: true, message: MESSAGES.USER_LOGGED_OUT_SUCCESSFULLY });
   } catch (error) {
     sendErrorResponse(res, error);

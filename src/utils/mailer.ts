@@ -11,9 +11,9 @@ export interface MailMessage {
  * Transactional mail.
  *
  * Uses Resend's HTTP API when `RESEND_API_KEY` and `MAIL_FROM` are configured;
- * otherwise it logs the message so development and tests never depend on a
- * provider. Delivery failures are logged and swallowed — a missing mail provider
- * must not fail the invite or password-reset call that triggered it.
+ * otherwise it logs the message and reports `delivered: false` so callers can be
+ * honest about it. Delivery failures are logged and swallowed — a missing mail
+ * provider must not fail the invite or password-reset call that triggered it.
  */
 export const sendMail = async (message: MailMessage): Promise<{ delivered: boolean; reason?: string }> => {
   const apiKey = process.env.RESEND_API_KEY;

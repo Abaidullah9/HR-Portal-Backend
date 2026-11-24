@@ -30,6 +30,7 @@ describe('User Controller', () => {
       status: jest.fn().mockReturnThis(),
       json: jest.fn(),
       cookie: jest.fn(),
+      clearCookie: jest.fn(),
     };
   });
 
@@ -59,9 +60,8 @@ describe('User Controller', () => {
       await userController.logoutUser(req as Request, res as Response);
 
       expect(res.status).toHaveBeenCalledWith(200);
-      expect(res.cookie).toHaveBeenCalledWith('accessToken', '', expect.objectContaining({
-        maxAge: 0,
-      }));
+      // Browsers match a deletion on the cookie name and its path.
+      expect(res.clearCookie).toHaveBeenCalledWith('accessToken', { path: '/' });
     });
   });
 

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { isAuthenticated } from "../middlewares/auth.middleware";
 import { authorize } from "../middlewares/authorize.middleware";
 import { validateResource } from "../middlewares/validateResource";
@@ -8,15 +8,23 @@ import { MESSAGES } from "../utils/helper/constants/messages";
 import { StatusCode } from "../utils/helper/constants/enum";
 import userController from "../controllers/user.controller";
 
-// Only failed sign-ins count. Counting successes locked out every user behind a
-// shared address after five ordinary logins in fifteen minutes, which is normal
-// traffic, not an attack.
+// Only failed sign-ins count, and they are counted per account as well as per
+// address. Keying on the IP alone meant five mistyped passwords anywhere behind
+// an office NAT locked out every colleague; keying on the account keeps that
+// protection without making the portal unusable from a shared network.
+const loginLimit = Number(process.env.LOGIN_RATE_LIMIT_MAX || 20);
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5,
+  windowMs: Number(process.env.LOGIN_RATE_LIMIT_WINDOW_MINUTES || 15) * 60 * 1000,
+  max: Number.isFinite(loginLimit) && loginLimit > 0 ? loginLimit : 20,
   skipSuccessfulRequests: true,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
   statusCode: StatusCode.TOO_MANY_REQUESTS,
   message: { success: false, message: MESSAGES.LOGIN_ATTEMPTS_EXCEEDED },
+  keyGenerator: (req) => {
+    const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
+    return `${ipKeyGenerator(req.ip ?? "")}:${email}`;
+  },
 });
 
 const router = Router();

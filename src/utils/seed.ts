@@ -23,6 +23,7 @@ import Feedback from '../models/feedback.model';
 import Team from '../models/team.model';
 import Report from '../models/report.model';
 import EmployeeDocument from '../models/document.model';
+import AuditLog from '../models/auditLog.model';
 
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/HR-DB';
 
@@ -34,6 +35,7 @@ async function seedDatabase() {
 
     console.log('🧹 Clearing existing data...');
     await Promise.all([
+      AuditLog.deleteMany({}),
       Report.deleteMany({}),
       Team.deleteMany({}),
       Feedback.deleteMany({}),
@@ -334,7 +336,7 @@ async function seedDatabase() {
       year: 2024
     });
 
-    await LeaveRequest.create({
+    const leaveRequest = await LeaveRequest.create({
       organizationId: orgId,
       employeeId: employeeEmp._id,
       leaveType: 'vacation',
@@ -362,7 +364,7 @@ async function seedDatabase() {
     currentMonthEnd.setMonth(currentMonthStart.getMonth() + 1);
     currentMonthEnd.setDate(0);
 
-    await EmployeePayroll.create({
+    const payroll = await EmployeePayroll.create({
       organizationId: orgId,
       employeeId: employeeEmp._id,
       baseSalary: 7916.67,
@@ -425,7 +427,7 @@ async function seedDatabase() {
     });
 
     console.log('🌱 Seeding Documents...');
-    await EmployeeDocument.create({
+    const contract = await EmployeeDocument.create({
       organizationId: orgId,
       employeeId: employeeEmp._id,
       name: 'Diana Contract.pdf',
@@ -433,6 +435,29 @@ async function seedDatabase() {
       fileUrl: 'https://example.com/documents/diana_contract.pdf',
       uploadedBy: users[1]!._id
     });
+
+    // The audit page is part of the product, so a fresh database shows a
+    // realistic trail instead of an empty state that reads like a broken screen.
+    // Written through the driver collection to keep the seeded timestamps.
+    console.log('🌱 Seeding Audit Trail...');
+    const day = 24 * 60 * 60 * 1000;
+    const auditTrail = [
+      { actorId: users[0]!._id, actorName: 'Alice Admin', action: 'organizationSetting.update', entity: 'OrganizationSetting', detail: 'PATCH /api/v1/organization-settings', daysAgo: 9 },
+      { actorId: users[1]!._id, actorName: 'Bob HR', action: 'department.create', entity: 'Department', detail: 'POST /api/v1/departments', daysAgo: 8 },
+      { actorId: users[1]!._id, actorName: 'Bob HR', action: 'jobPosting.create', entity: 'JobPosting', entityId: jobPosting._id.toString(), detail: 'POST /api/v1/job-postings', daysAgo: 6 },
+      { actorId: users[0]!._id, actorName: 'Alice Admin', action: 'role.update', entity: 'Role', entityId: roles[1]!._id.toString(), detail: 'PATCH /api/v1/roles/:id', daysAgo: 5 },
+      { actorId: users[1]!._id, actorName: 'Bob HR', action: 'document.create', entity: 'Document', entityId: contract._id.toString(), detail: 'POST /api/v1/documents', daysAgo: 4 },
+      { actorId: users[3]!._id, actorName: 'Diana Employee', action: 'leaveRequest.create', entity: 'LeaveRequest', entityId: leaveRequest._id.toString(), detail: 'POST /api/v1/leave-requests', daysAgo: 3 },
+      { actorId: users[1]!._id, actorName: 'Bob HR', action: 'payroll.create', entity: 'Payroll', entityId: payroll._id.toString(), detail: 'POST /api/v1/payroll', daysAgo: 2 },
+      { actorId: users[0]!._id, actorName: 'Alice Admin', action: 'employee.update', entity: 'Employee', entityId: employeeEmp._id.toString(), detail: 'PATCH /api/v1/employees/:id', daysAgo: 1 },
+    ];
+    const now = Date.now();
+    await AuditLog.collection.insertMany(
+      auditTrail.map(({ daysAgo, ...entry }) => ({
+        ...entry,
+        createdAt: new Date(now - daysAgo * day),
+      })),
+    );
 
     console.log('🎉 Database seeded successfully!');
     console.log('👤 Test Login: admin@techcorp.com / Password123!');

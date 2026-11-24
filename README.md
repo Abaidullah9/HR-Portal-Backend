@@ -12,6 +12,13 @@ Pairs with the [HR Portal Frontend](https://github.com/Abaidullah9/HR-Portal-Fro
 - **Auth:** JWT in httpOnly cookies
 - **Testing:** Jest + Supertest (58 tests)
 
+## Deployment
+
+A `Dockerfile` builds the API into a slim production image, and the workspace's
+`docker-compose.yml` runs it with MongoDB and the frontend. See `DEPLOYMENT.md`
+beside both repositories for the commands and the production checklist (cookie
+mode for split hostnames, mail provider, object storage, proxy settings).
+
 ## Getting Started
 
 ### Prerequisites

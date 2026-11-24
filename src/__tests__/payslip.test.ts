@@ -73,4 +73,15 @@ describe('Payslips', () => {
     expect(payslips).toHaveLength(1);
     expect(payslips[0]!.netPay).toBe(950);
   });
+
+  it('returns nothing for a staff account that has no employee profile', async () => {
+    employeeModel.findOne.mockReturnValue({
+      select: jest.fn().mockResolvedValue(null),
+    });
+
+    const payslips = await payrollServices.getOwnPayslips('user-admin');
+
+    expect(payslips).toEqual([]);
+    expect(payrollModel.find).not.toHaveBeenCalled();
+  });
 });

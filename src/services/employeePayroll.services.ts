@@ -123,7 +123,8 @@ const getPayslip = async (_id: string, scope?: ReadScope) => {
 /** Self-service: the employee is resolved from the session, never the client. */
 const getOwnPayslips = async (userId: string) => {
   const employee = await employeeModel.findOne({ userId }).select("_id");
-  if (!employee) throw new AppError(MESSAGES.EMPLOYEE_NOT_FOUND, StatusCode.NOT_FOUND);
+  // Staff accounts have no employee profile, and so no payslips of their own.
+  if (!employee) return [];
 
   const records = await employeePayrollModel
     .find(tenantFilter({ employeeId: employee._id }))

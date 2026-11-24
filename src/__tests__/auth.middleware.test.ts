@@ -70,6 +70,56 @@ describe('Auth Middleware', () => {
       expect(next).toHaveBeenCalled();
       expect(req.userId).toBe('456');
     });
+
+    it('rejects a token minted before the last password change', async () => {
+      const jwt = require('jsonwebtoken');
+      const userModel = require('../models/user.model');
+
+      // Session generation moved on (password reset), token still says 0.
+      jwt.verify.mockReturnValue({ userId: '123', tokenVersion: 0 });
+      userModel.findOne.mockResolvedValue({ _id: '123', isActive: true, tokenVersion: 1 });
+
+      req.cookies = { accessToken: 'stale-token' };
+
+      const { isAuthenticated } = require('../middlewares/auth.middleware');
+      await isAuthenticated(req as Request, res as Response, next);
+
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(next).not.toHaveBeenCalled();
+      expect(req.user).toBeUndefined();
+    });
+
+    it('accepts a token from the current session generation', async () => {
+      const jwt = require('jsonwebtoken');
+      const userModel = require('../models/user.model');
+
+      jwt.verify.mockReturnValue({ userId: '123', tokenVersion: 3 });
+      userModel.findOne.mockResolvedValue({ _id: '123', isActive: true, tokenVersion: 3 });
+
+      req.cookies = { accessToken: 'current-token' };
+
+      const { isAuthenticated } = require('../middlewares/auth.middleware');
+      await isAuthenticated(req as Request, res as Response, next);
+
+      expect(next).toHaveBeenCalled();
+      expect(req.userId).toBe('123');
+    });
+
+    it('treats tokens and users without a generation as generation zero', async () => {
+      const jwt = require('jsonwebtoken');
+      const userModel = require('../models/user.model');
+
+      // Tokens issued before this field existed must keep working.
+      jwt.verify.mockReturnValue({ userId: '123' });
+      userModel.findOne.mockResolvedValue({ _id: '123', isActive: true });
+
+      req.cookies = { accessToken: 'legacy-token' };
+
+      const { isAuthenticated } = require('../middlewares/auth.middleware');
+      await isAuthenticated(req as Request, res as Response, next);
+
+      expect(next).toHaveBeenCalled();
+    });
   });
 
   describe('isAdmin', () => {

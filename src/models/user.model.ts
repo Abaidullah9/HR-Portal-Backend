@@ -19,6 +19,11 @@ export interface IUser extends Document {
   inviteTokenExpires?: Date;
   /** Bumped on password change so old sessions can be told apart. */
   passwordChangedAt?: Date;
+  /**
+   * Session generation. Tokens carry the value they were minted with; bumping
+   * this field makes every previously issued token stop working.
+   */
+  tokenVersion?: number;
 }
 const userSchema = new Schema<IUser>({
   name: { type: String, required: true, trim: true },
@@ -32,6 +37,7 @@ const userSchema = new Schema<IUser>({
   resetTokenExpires: { type: Date, select: false },
   inviteToken: { type: String, select: false },
   inviteTokenExpires: { type: Date, select: false },
-  passwordChangedAt: { type: Date }
+  passwordChangedAt: { type: Date },
+  tokenVersion: { type: Number, default: 0 }
 }, { timestamps: true });
 export default mongoose.model<IUser>('User', userSchema);

@@ -88,7 +88,7 @@ const registerUser = async (userData: CreateUserDTO & { inviteToken?: string }) 
   }
 
   const user = await acceptInvite(userData.inviteToken, userData.password);
-  const token = generateToken(user._id.toString());
+  const token = generateToken(user._id.toString(), user.tokenVersion ?? 0);
   return { user, token };
 };
 
@@ -111,7 +111,7 @@ const loginUser = async (email: string, password: string) => {
 
   const user_obj = user.toObject();
   const { password: _, ...userData } = user_obj;
-  const token = generateToken(user._id.toString());
+  const token = generateToken(user._id.toString(), user.tokenVersion ?? 0);
 
   return { user: userData, token };
 };
@@ -132,6 +132,7 @@ export const acceptInvite = async (token: string, password: string) => {
     { _id: user._id },
     {
       $set: { password: await bcrypt.hash(password, 10), passwordChangedAt: new Date() },
+      $inc: { tokenVersion: 1 },
       $unset: { inviteToken: 1, inviteTokenExpires: 1 },
     },
   );
@@ -192,6 +193,8 @@ const resetPassword = async (token: string, password: string) => {
         password: await bcrypt.hash(password, 10),
         passwordChangedAt: new Date(),
       },
+      // Any session opened before the reset was issued must not survive it.
+      $inc: { tokenVersion: 1 },
       ...clearResetToken,
     },
   );
@@ -217,6 +220,7 @@ const changePassword = async (userId: string, currentPassword: string, newPasswo
 
   user.password = await bcrypt.hash(newPassword, 10);
   user.passwordChangedAt = new Date();
+  user.tokenVersion = (user.tokenVersion ?? 0) + 1;
   await user.save();
   return { changedAt: user.passwordChangedAt };
 };
@@ -258,15 +262,21 @@ const updateUser = async (_id: string, updateData: Partial<CreateUserDTO>) => {
       throw new AppError(MESSAGES.EMAIL_ALREADY_EXISTS, StatusCode.CONFLICT);
     }
   }
-  const updatedUserData = {
-    ...updateData,
-    ...(updateData.password
-      ? { password: await bcrypt.hash(updateData.password, 10), passwordChangedAt: new Date() }
-      : {}),
-  };
+  // An administrative password change is still a password change: it has to
+  // invalidate whatever session the account was using before it.
+  const update = updateData.password
+    ? {
+        $set: {
+          ...updateData,
+          password: await bcrypt.hash(updateData.password, 10),
+          passwordChangedAt: new Date(),
+        },
+        $inc: { tokenVersion: 1 },
+      }
+    : updateData;
 
   const updatedUser = await userModel
-    .findByIdAndUpdate(_id, updatedUserData, { returnDocument: 'after' })
+    .findByIdAndUpdate(_id, update, { returnDocument: 'after' })
     .select('-password')
     .populate('roleId', 'roleName');
   if (!updatedUser) throw new AppError(MESSAGES.USER_NOT_FOUND, StatusCode.NOT_FOUND);
@@ -283,8 +293,15 @@ const deleteUser = async (_id: string) => {
 const updateUserStatus = async (_id: string, isActive: boolean) => {
   if (!_id || isActive === undefined) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
+  // Deactivating already stops every request at the isActive check; bumping the
+  // generation also kills the token itself, so reactivating the account does not
+  // revive old cookies.
   const updatedUser = await userModel
-    .findByIdAndUpdate(_id, { isActive }, { returnDocument: 'after' })
+    .findByIdAndUpdate(
+      _id,
+      { $set: { isActive }, ...(isActive ? {} : { $inc: { tokenVersion: 1 } }) },
+      { returnDocument: 'after' },
+    )
     .select('-password')
     .populate('roleId', 'roleName');
   if (!updatedUser) throw new AppError(MESSAGES.USER_NOT_FOUND, StatusCode.NOT_FOUND);

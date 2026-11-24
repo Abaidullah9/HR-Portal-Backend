@@ -169,6 +169,7 @@ export const MESSAGES = {
   // Auth & middleware messages
   NOT_LOGGED_IN: "You are not logged in. Please log in to get access.",
   USER_NO_LONGER_EXISTS: "The user belonging to this token no longer exists.",
+  SESSION_REVOKED: "Your session has ended. Please sign in again.",
   INVALID_OR_EXPIRED_TOKEN: "Invalid or expired token.",
   NOT_AUTHENTICATED: "Not authenticated",
   ADMIN_ACCESS_REQUIRED: "Admin access required.",

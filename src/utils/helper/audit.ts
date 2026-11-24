@@ -8,11 +8,23 @@ export interface AuditEntry {
   detail?: string | undefined;
 }
 
+/** What `recordAudit` needs from a response in order to claim the entry. */
+type AuditableResponse = { locals: Record<string, unknown> };
+
 /**
  * Best-effort audit write: a failure here must never fail the operation it
  * describes, so the error is logged and swallowed.
+ *
+ * Passing the response marks the request as already audited so the central
+ * `auditMutations` middleware does not add a second, vaguer entry for the same
+ * action.
  */
-export const recordAudit = async (actorId: string | undefined, entry: AuditEntry) => {
+export const recordAudit = async (
+  actorId: string | undefined,
+  entry: AuditEntry,
+  res?: AuditableResponse,
+) => {
+  if (res) res.locals.auditRecorded = true;
   if (!actorId) return;
   try {
     const actor = await userModel.findById(actorId).select('name');

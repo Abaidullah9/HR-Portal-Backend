@@ -154,7 +154,7 @@ const anonymizeEmployee = async (req: Request, res: Response) => {
       entity: 'Employee',
       entityId: req.params._id as string,
       detail: 'GDPR erasure request: identifying fields replaced',
-    });
+    }, res);
     res.status(StatusCode.OK).json({ success: true, message: 'Employee data erased', data });
   } catch (error) {
     sendErrorResponse(res, error);
@@ -181,7 +181,7 @@ const deleteEmployee = async (req: Request, res: Response) => {
       entity: 'Employee',
       entityId: _id as string,
       detail: deletedEmployee.name,
-    });
+    }, res);
     res.status(StatusCode.OK).json({ success: true, message: MESSAGES.EMPLOYEE_DELETED_SUCCESSFULLY, data: deletedEmployee });
   } catch (error) {
     sendErrorResponse(res, error);

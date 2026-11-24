@@ -15,6 +15,13 @@ declare global {
   }
 }
 
+/**
+ * A token minted before the user's last password change, reset or deactivation
+ * no longer matches the session generation stored on the user record.
+ */
+const isCurrentSession = (decoded: jwt.JwtPayload, user: { tokenVersion?: number }): boolean =>
+  (user.tokenVersion ?? 0) === (typeof decoded.tokenVersion === "number" ? decoded.tokenVersion : 0);
+
 export const isAuthenticated = async (
   req: Request,
   res: Response,
@@ -50,6 +57,15 @@ export const isAuthenticated = async (
           success: false,
           message: MESSAGES.USER_NO_LONGER_EXISTS,
         });
+      return;
+    }
+    // The token is only as valid as the session generation it was minted in.
+    // Password changes, resets and deactivations bump the counter, so a cookie
+    // captured before them stops working immediately instead of at expiry.
+    if (!isCurrentSession(decoded, currentUser)) {
+      res
+        .status(StatusCode.UNAUTHORIZED)
+        .json({ success: false, message: MESSAGES.SESSION_REVOKED });
       return;
     }
     req.user = currentUser;
@@ -116,7 +132,7 @@ export const attachUser = async (
         _id: decoded.userId,
         isActive: true,
       });
-      if (currentUser) {
+      if (currentUser && isCurrentSession(decoded, currentUser)) {
         req.user = currentUser;
         req.userId = currentUser._id.toString();
       }

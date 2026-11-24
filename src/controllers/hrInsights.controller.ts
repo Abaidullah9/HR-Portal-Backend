@@ -52,7 +52,7 @@ const generatePayroll = async (req: Request, res: Response) => {
       action: 'payroll.generate',
       entity: 'EmployeePayroll',
       detail: `period ${payPeriodStart} → ${payPeriodEnd}: created ${data.created}, skipped ${data.skipped}`,
-    });
+    }, res);
 
     res.status(StatusCode.CREATED).json({ success: true, message: 'Payroll period generated', data });
   } catch (error) {

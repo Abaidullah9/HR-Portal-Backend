@@ -50,7 +50,11 @@ export const auditMutations = (req: Request, res: Response, next: NextFunction) 
 
   res.on('finish', () => {
     if (res.statusCode >= 400) return;
+    // Unauthenticated or failed mutations leave no actor to attribute them to.
     if (!req.userId) return;
+    // A controller that knows more than the URL does has already written the
+    // entry; adding the generic one here would log the action twice.
+    if (res.locals.auditRecorded) return;
 
     const entity = entityFromPath(req.originalUrl || req.url);
     const idParam = (req.params as Record<string, string | undefined>)._id
@@ -58,9 +62,7 @@ export const auditMutations = (req: Request, res: Response, next: NextFunction) 
     const method = req.method.toLowerCase();
     const action = `${entity.charAt(0).toLowerCase()}${entity.slice(1)}.${method}`;
 
-    const detail = typeof req.body === 'object' && req.body !== null
-      ? `${req.method} ${(req.originalUrl || req.url).split('?')[0]}`
-      : `${req.method} ${(req.originalUrl || req.url).split('?')[0]}`;
+    const detail = `${req.method} ${(req.originalUrl || req.url).split('?')[0]}`;
 
     void recordAudit(req.userId, {
       action,

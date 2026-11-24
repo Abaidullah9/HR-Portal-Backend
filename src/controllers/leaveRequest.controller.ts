@@ -116,7 +116,7 @@ const approveRejectLeave = async (req: Request, res: Response) => {
       entity: 'LeaveRequest',
       entityId: _id as string,
       detail: approvalData.rejectionReason ? `reason: ${approvalData.rejectionReason}` : undefined,
-    });
+    }, res);
     res.status(StatusCode.OK).json({ success: true, message: MESSAGES.LEAVE_REQUEST_UPDATED_SUCCESSFULLY, data: result });
   } catch (error) {
     sendErrorResponse(res, error);

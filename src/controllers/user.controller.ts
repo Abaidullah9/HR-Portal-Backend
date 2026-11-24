@@ -135,7 +135,7 @@ const acceptInvite = async (req: Request, res: Response) => {
   try {
     const { token, password } = req.body as { token?: string; password?: string };
     const user = await userServices.acceptInvite(token ?? '', password ?? '');
-    const jwt = generateToken(user._id.toString());
+    const jwt = generateToken(user._id.toString(), user.tokenVersion ?? 0);
     setTokenCookie(res, jwt);
     res.status(StatusCode.OK).json({ success: true, message: 'Account activated', data: { user, token: jwt } });
   } catch (error) {

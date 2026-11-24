@@ -107,7 +107,7 @@ const updatePayrollStatus = async (req: Request, res: Response) => {
       action: `payroll.${status}`,
       entity: 'EmployeePayroll',
       entityId: _id as string,
-    });
+    }, res);
     res.status(StatusCode.OK).json({ success: true, message: MESSAGES.PAYROLL_UPDATED_SUCCESSFULLY, data: result });
   } catch (error) {
     sendErrorResponse(res, error);

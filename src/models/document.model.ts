@@ -19,8 +19,8 @@ export interface IEmployeeDocument extends Document {
 }
 
 const documentSchema = new Schema<IEmployeeDocument>({
-  organizationId: { type: Schema.Types.ObjectId, ref: 'Organization', index: true },
-  employeeId: { type: Schema.Types.ObjectId, ref: 'Employee', required: true, index: true },
+  organizationId: { type: Schema.Types.ObjectId, ref: 'Organization' },
+  employeeId: { type: Schema.Types.ObjectId, ref: 'Employee', required: true },
   name: { type: String, required: true, trim: true },
   type: { type: String, enum: ['resume', 'id_proof', 'certificate', 'contract', 'other'], required: true },
   storageKey: { type: String, index: true },
@@ -30,5 +30,9 @@ const documentSchema = new Schema<IEmployeeDocument>({
   retentionUntil: { type: Date, index: true },
   uploadedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
 }, { timestamps: true });
+
+// Document lists are per organisation and per employee, newest first.
+documentSchema.index({ organizationId: 1, employeeId: 1, createdAt: -1 });
+documentSchema.index({ organizationId: 1, createdAt: -1 });
 
 export default mongoose.model<IEmployeeDocument>('EmployeeDocument', documentSchema);

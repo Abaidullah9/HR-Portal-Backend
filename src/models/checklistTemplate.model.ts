@@ -12,8 +12,8 @@ export interface IChecklistTemplate extends Document {
 }
 
 const checklistTemplateSchema = new Schema<IChecklistTemplate>({
-  organizationId: { type: Schema.Types.ObjectId, ref: 'Organization', index: true },
-  type: { type: String, enum: ['onboarding', 'offboarding'], required: true, index: true },
+  organizationId: { type: Schema.Types.ObjectId, ref: 'Organization' },
+  type: { type: String, enum: ['onboarding', 'offboarding'], required: true },
   title: { type: String, required: true, trim: true },
   category: {
     type: String,
@@ -23,5 +23,8 @@ const checklistTemplateSchema = new Schema<IChecklistTemplate>({
   dueOffsetDays: { type: Number, default: 0 },
   active: { type: Boolean, default: true },
 }, { timestamps: true });
+
+// Templates are looked up per organisation by type, filtered to active ones.
+checklistTemplateSchema.index({ organizationId: 1, type: 1, active: 1 });
 
 export default mongoose.model<IChecklistTemplate>('ChecklistTemplate', checklistTemplateSchema);

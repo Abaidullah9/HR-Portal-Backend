@@ -14,14 +14,18 @@ export interface IAttendance extends Document {
   regularizationNote?: string;
 }
 const attendanceSchema = new Schema<IAttendance>({
-  organizationId: { type: Schema.Types.ObjectId, ref: 'Organization', index: true },
-  employeeId: { type: Schema.Types.ObjectId, ref: 'Employee', required: true, index: true },
-  date: { type: Date, required: true, index: true },
-  dateKey: { type: String, match: /^\d{4}-\d{2}-\d{2}$/, index: true },
+  organizationId: { type: Schema.Types.ObjectId, ref: 'Organization' },
+  employeeId: { type: Schema.Types.ObjectId, ref: 'Employee', required: true },
+  date: { type: Date, required: true },
+  dateKey: { type: String, match: /^\d{4}-\d{2}-\d{2}$/ },
   checkIn: { type: Date },
   checkOut: { type: Date },
   regularized: { type: Boolean, default: false },
   regularizationNote: { type: String, trim: true },
 }, { timestamps: true });
+// One record per person per calendar day: the register is the source of truth
+// for payroll hours, so a duplicate day must be rejected by the database.
 attendanceSchema.index({ employeeId: 1, dateKey: 1 }, { unique: true, sparse: true });
+// Attendance lists are read per organisation and per employee, newest first.
+attendanceSchema.index({ organizationId: 1, employeeId: 1, date: -1 });
 export default mongoose.model<IAttendance>('Attendance', attendanceSchema);

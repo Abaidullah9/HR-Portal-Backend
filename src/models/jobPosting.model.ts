@@ -14,7 +14,7 @@ export interface IJobPosting extends Document {
 }
 const jobPostingSchema = new Schema<IJobPosting>({
   position: { type: String, required: true, index: true },
-  departmentId: { type: Schema.Types.ObjectId, ref: 'Department', required: true, index: true },
+  departmentId: { type: Schema.Types.ObjectId, ref: 'Department', required: true },
   description: { type: String, required: true },
   requirements: [{ type: String }],
   numberOfOpenings: { type: Number, required: true, default: 1 },
@@ -23,4 +23,9 @@ const jobPostingSchema = new Schema<IJobPosting>({
   closingDate: { type: Date },
   status: { type: String, enum: ['open', 'closed', 'on-hold'], default: 'open', index: true }
 }, { timestamps: true });
+
+// Postings for one department, newest first; the global board sorts on
+// postedOnDate alone, which keeps its own single-field index.
+jobPostingSchema.index({ departmentId: 1, postedOnDate: -1 });
+
 export default mongoose.model<IJobPosting>('JobPosting', jobPostingSchema);

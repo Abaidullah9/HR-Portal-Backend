@@ -47,4 +47,12 @@ const payrollSchema = new Schema<IEmployeePayroll>({
   status: { type: String, enum: ['pending', 'completed', 'failed', 'reversed'], default: 'pending', index: true }
 }, { timestamps: true });
 payrollSchema.index({ employeeId: 1, payPeriodStart: 1 });
+// A payroll run writes one record per employee, so repeating a run must not pay
+// the same person twice. The index is partial rather than sparse: repeated
+// hand-entered records have no run, and a sparse index would treat their missing
+// payRunId as a shared null and reject the second one.
+payrollSchema.index(
+  { employeeId: 1, payRunId: 1 },
+  { unique: true, partialFilterExpression: { payRunId: { $type: 'objectId' } } },
+);
 export default mongoose.model<IEmployeePayroll>('EmployeePayroll', payrollSchema);

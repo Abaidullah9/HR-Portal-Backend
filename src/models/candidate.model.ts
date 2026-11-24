@@ -27,12 +27,12 @@ export interface ICandidate extends Document {
 }
 const candidateSchema = new Schema<ICandidate>({
   organizationId: { type: Schema.Types.ObjectId, ref: 'Organization', index: true },
-  jobPostingId: { type: Schema.Types.ObjectId, ref: 'JobPosting', required: true, index: true },
+  jobPostingId: { type: Schema.Types.ObjectId, ref: 'JobPosting', required: true },
   name: { type: String, required: true, trim: true },
   email: { type: String, required: true, lowercase: true, trim: true },
   phone: { type: String, trim: true },
   source: { type: String, required: true },
-  appliedDate: { type: Date, required: true, default: Date.now, index: true },
+  appliedDate: { type: Date, required: true, default: Date.now },
   status: { type: String, enum: ['applied', 'screening', 'interview', 'offered', 'hired', 'rejected'], default: 'applied', index: true },
   resume: { type: String },
   notes: { type: String, trim: true },
@@ -48,4 +48,8 @@ const candidateSchema = new Schema<ICandidate>({
   hiredEmployeeId: { type: Schema.Types.ObjectId, ref: 'Employee' },
   stageChangedAt: { type: Date }
 }, { timestamps: true });
+
+// The pipeline for one posting, newest application first.
+candidateSchema.index({ jobPostingId: 1, appliedDate: -1 });
+
 export default mongoose.model<ICandidate>('Candidate', candidateSchema);

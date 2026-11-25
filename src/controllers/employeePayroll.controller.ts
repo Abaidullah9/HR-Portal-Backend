@@ -8,7 +8,7 @@ import { CreatePayrollDTO, UpdatePayrollDTO } from "../utils/dtos/employeePayrol
 import { PaginationQuery } from "../utils/common";
 import { recordAudit } from "../utils/helper/audit";
 import { resolveReadScope } from "../utils/helper/ownership";
-import { buildPayslipPdf, type PayslipDocument } from "../utils/payslip-pdf";
+import { buildPayslipPdf } from "../utils/payslip-pdf";
 
 const addPayroll = async (req: Request, res: Response) => {
   try {
@@ -141,9 +141,12 @@ const downloadPayslip = async (req: Request, res: Response) => {
   try {
     const scope = await resolveReadScope(req.userId!);
     const payslip = await employeePayrollServices.getPayslip(req.params._id as string, scope);
-    const pdf = await buildPayslipPdf(payslip as unknown as PayslipDocument);
+    const pdf = await buildPayslipPdf(payslip);
 
-    const slug = payslip.employee.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const slug = payslip.employee.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
     const period = new Date(payslip.periodStart).toISOString().slice(0, 10);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="payslip-${slug}-${period}.pdf"`);

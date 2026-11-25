@@ -124,11 +124,16 @@ const updateAttendance = async (
     throw new AppError(MESSAGES.NOT_AUTHORIZED, StatusCode.FORBIDDEN);
   }
 
-  // Changing a recorded time is a correction, not an edit: it has to say why,
-  // because these hours feed payroll and the note is what makes it auditable.
-  const note = updateData.regularizationNote?.trim();
-  const changesTime = Boolean(updateData.checkIn || updateData.checkOut);
-  if (changesTime && !note) {
+  // A correction is an overwrite of a time that is already on the record, and it
+  // has to say why: these hours feed payroll. Logging a first check-out only
+  // fills in a blank, so the check-out button does not need a note.
+  const { regularizationNote, ...fields } = updateData;
+  const note = regularizationNote?.trim();
+  const overwritesRecordedTime =
+    (fields.checkIn !== undefined && existing.checkIn != null) ||
+    (fields.checkOut !== undefined && existing.checkOut != null);
+
+  if (overwritesRecordedTime && !note) {
     throw new AppError(
       'Add a note explaining the attendance correction',
       StatusCode.BAD_REQUEST,
@@ -138,7 +143,7 @@ const updateAttendance = async (
   const updatedAttendance = await attendanceModel
     .findByIdAndUpdate(
       _id,
-      changesTime ? { ...updateData, regularized: true, regularizationNote: note } : updateData,
+      overwritesRecordedTime ? { ...fields, regularized: true, regularizationNote: note } : fields,
       { returnDocument: 'after' },
     )
     .populate('employeeId', 'name email employeeCode');

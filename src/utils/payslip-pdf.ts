@@ -8,7 +8,6 @@ import PDFDocument from 'pdfkit';
 export interface PayslipLine {
   label: string;
   amount: number;
-  note?: string;
 }
 
 export interface PayslipDocument {

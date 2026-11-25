@@ -6,11 +6,18 @@ import { StatusCode } from "../utils/helper/constants/enum";
 import { AppError } from "../utils/helper/AppError";
 import { CreateAttendanceDTO, UpdateAttendanceDTO } from "../utils/dtos/attendance.dto";
 import { PaginationQuery } from "../utils/common";
-import { resolveReadScope } from "../utils/helper/ownership";
+import { canAccessEmployee, resolveReadScope } from "../utils/helper/ownership";
 
 const addAttendance = async (req: Request, res: Response) => {
   try {
     const body: CreateAttendanceDTO = req.body;
+    // Holding create_Attendance made the employeeId in the body trusted, so any
+    // employee could clock a colleague in or out. The caller may only create
+    // records for themselves, their reports, or (HR/Admin) anyone.
+    const scope = await resolveReadScope(req.userId!);
+    if (!body?.employeeId || !canAccessEmployee(scope, String(body.employeeId))) {
+      throw new AppError(MESSAGES.NOT_AUTHORIZED, StatusCode.FORBIDDEN);
+    }
     const newAttendance = await attendanceServices.addAttendance(body);
     if (!newAttendance) throw new AppError(MESSAGES.FAILED_TO_CREATE_ATTENDANCE, StatusCode.INTERNAL_SERVER_ERROR);
     res.status(StatusCode.CREATED).json({ success: true, message: MESSAGES.ATTENDANCE_ADDED_SUCCESSFULLY, data: newAttendance });

@@ -119,6 +119,17 @@ async function seedDatabase() {
       { actionName: 'update_Document', actionDescription: 'Update document' },
       { actionName: 'delete_Document', actionDescription: 'Delete document' },
 
+      // Self-service actions. The names deliberately lack a `_Module` suffix, so
+      // the module-wide role grants below never pick them up by accident.
+      { actionName: 'read_OwnPayslip', actionDescription: 'View own payslips' },
+      { actionName: 'read_OwnAppraisal', actionDescription: 'View own appraisals' },
+      { actionName: 'review_OwnAppraisal', actionDescription: 'Submit own appraisal self review' },
+      { actionName: 'read_OwnLeaveBalance', actionDescription: 'View own leave balances' },
+      { actionName: 'read_OwnAttendance', actionDescription: 'View own attendance' },
+      { actionName: 'read_OwnGoal', actionDescription: 'View own goals' },
+      { actionName: 'update_OwnGoalProgress', actionDescription: 'Update own goal progress' },
+      { actionName: 'read_OwnProfile', actionDescription: 'View own employee profile' },
+
       // Employee module
       { actionName: 'read_Employee', actionDescription: 'View employees' },
       { actionName: 'create_Employee', actionDescription: 'Create employee' },
@@ -127,7 +138,6 @@ async function seedDatabase() {
 
       // Payroll module
       { actionName: 'read_Payroll', actionDescription: 'View payroll records' },
-      { actionName: 'read_OwnPayslip', actionDescription: 'View own payslips' },
       { actionName: 'create_Payroll', actionDescription: 'Create payroll record' },
       { actionName: 'update_Payroll', actionDescription: 'Update payroll record' },
       { actionName: 'update_PayrollStatus', actionDescription: 'Update payroll status' },
@@ -215,8 +225,11 @@ async function seedDatabase() {
     const adminActionIds = actionDocs.map(a => a._id);
     // HR gets: Employee, Candidate, LeaveRequest, LeaveBalance, Document, JobPosting, Interview, Report, User, Payroll
     const hrModules = ['Employee', 'Candidate', 'LeaveRequest', 'LeaveBalance', 'Document', 'JobPosting', 'Interview', 'Report', 'User', 'Payroll'];
+    // Actions whose module suffix the filter above cannot match (an extra word
+    // after the module name), granted explicitly so HR can finish the workflow.
+    const hrExtraActions = ['update_PayrollStatus'];
     const hrActionIds = actionDocs
-      .filter(a => hrModules.some(m => a.actionName.endsWith(`_${m}`)))
+      .filter(a => hrModules.some(m => a.actionName.endsWith(`_${m}`)) || hrExtraActions.includes(a.actionName))
       .map(a => a._id);
     // Manager gets: Employee, Department, Attendance, Appraisal, Feedback, Team, LeaveRequest, PerformanceCycle
     const managerModules = ['Employee', 'Department', 'Attendance', 'Appraisal', 'Feedback', 'Team', 'LeaveRequest', 'PerformanceCycle'];
@@ -231,7 +244,16 @@ async function seedDatabase() {
     // Self-service grants: every role may read the caller's own records. The
     // names deliberately lack a `_Module` suffix, so no module-wide grant picks
     // them up by accident.
-    const selfServiceActions = ['read_OwnPayslip'];
+    const selfServiceActions = [
+      'read_OwnPayslip',
+      'read_OwnAppraisal',
+      'review_OwnAppraisal',
+      'read_OwnLeaveBalance',
+      'read_OwnAttendance',
+      'read_OwnGoal',
+      'update_OwnGoalProgress',
+      'read_OwnProfile',
+    ];
     const selfServiceActionIds = actionDocs
       .filter(a => selfServiceActions.includes(a.actionName))
       .map(a => a._id);

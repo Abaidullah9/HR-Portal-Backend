@@ -19,6 +19,9 @@ export interface IUser extends Document {
   inviteTokenExpires?: Date;
   /** Bumped on password change so old sessions can be told apart. */
   passwordChangedAt?: Date;
+  /** Base32 TOTP secret. A secret without `mfaEnabled` is a pending setup. */
+  mfaSecret?: string;
+  mfaEnabled?: boolean;
   /**
    * Session generation. Tokens carry the value they were minted with; bumping
    * this field makes every previously issued token stop working.
@@ -38,6 +41,8 @@ const userSchema = new Schema<IUser>({
   inviteToken: { type: String, select: false },
   inviteTokenExpires: { type: Date, select: false },
   passwordChangedAt: { type: Date },
+  mfaSecret: { type: String, select: false },
+  mfaEnabled: { type: Boolean, default: false },
   tokenVersion: { type: Number, default: 0 }
 }, { timestamps: true });
 export default mongoose.model<IUser>('User', userSchema);

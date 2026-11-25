@@ -9,9 +9,9 @@ const router = Router();
 
 router.get("/paginated", isAuthenticated, authorize("read_Employee"), employeeController.getAllEmployee);
 router.get("/org-chart", isAuthenticated, authorize("read_Employee"), employeeController.orgChart);
-// Self-service profile: authorised on an action every role holds, scoped to the
-// caller's own employee record inside the controller.
-router.get("/me/profile", isAuthenticated, authorize("read_LeaveRequest"), employeeController.getOwnProfile);
+// Self-service profile: scoped to the caller's own employee record inside the
+// controller, on the action every role holds for exactly this.
+router.get("/me/profile", isAuthenticated, authorize("read_OwnProfile"), employeeController.getOwnProfile);
 // Bulk import creates invited users plus employee records, one row at a time.
 router.post("/import", isAuthenticated, authorize("create_Employee"), employeeController.importEmployees);
 router.get("/active", isAuthenticated, authorize("read_Employee"), employeeController.getActiveEmployees);

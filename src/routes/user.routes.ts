@@ -31,6 +31,12 @@ const router = Router();
 
 router.post("/register", validateResource(validateCreateUser), userController.registerUser);
 router.post("/login", loginLimiter, userController.loginUser);
+// Second step of a two-factor sign-in; the challenge token is single-purpose
+// and expires in five minutes.
+router.post("/login/mfa", loginLimiter, userController.verifyMfa);
+router.post("/mfa/setup", isAuthenticated, userController.setupMfa);
+router.post("/mfa/enable", isAuthenticated, userController.enableMfa);
+router.post("/mfa/disable", isAuthenticated, userController.disableMfa);
 router.post("/accept-invite", loginLimiter, userController.acceptInvite);
 router.post("/forgot-password", loginLimiter, userController.forgotPassword);
 router.post("/change-password", isAuthenticated, userController.changePassword);

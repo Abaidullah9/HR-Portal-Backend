@@ -29,10 +29,67 @@ const registerUser = async (req: Request, res: Response) => {
 const loginUser = async (req: Request, res: Response) => {
   try {
     const { email, password }: { email: string; password: string } = req.body;
-    const { user, token } = await userServices.loginUser(email, password);
+    const result = await userServices.loginUser(email, password);
+
+    // Two-factor accounts get a challenge instead of a session; the cookie is
+    // only set once the authenticator code is verified.
+    if ('mfaRequired' in result) {
+      res.status(StatusCode.OK).json({
+        success: true,
+        message: 'Enter the code from your authenticator app',
+        data: { mfaRequired: true, mfaToken: result.mfaToken },
+      });
+      return;
+    }
+
+    const { user, token } = result;
     if (!user) throw new AppError(MESSAGES.INVALID_CREDENTIALS, StatusCode.UNAUTHORIZED);
     setTokenCookie(res, token);
     res.status(StatusCode.OK).json({ success: true, message: MESSAGES.USER_LOGGED_IN_SUCCESSFULLY, data: { user, token } });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
+
+const verifyMfa = async (req: Request, res: Response) => {
+  try {
+    const { mfaToken, code } = req.body as { mfaToken?: string; code?: string };
+    const { user, token } = await userServices.verifyMfaLogin(mfaToken ?? '', code ?? '');
+    setTokenCookie(res, token);
+    res.status(StatusCode.OK).json({
+      success: true,
+      message: MESSAGES.USER_LOGGED_IN_SUCCESSFULLY,
+      data: { user, token },
+    });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
+
+const setupMfa = async (req: Request, res: Response) => {
+  try {
+    const data = await userServices.setupMfa(req.userId!);
+    res.status(StatusCode.OK).json({ success: true, message: 'Scan the secret with your authenticator app', data });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
+
+const enableMfa = async (req: Request, res: Response) => {
+  try {
+    const { code } = req.body as { code?: string };
+    const data = await userServices.enableMfa(req.userId!, code ?? '');
+    res.status(StatusCode.OK).json({ success: true, message: 'Two-factor authentication is on', data });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
+
+const disableMfa = async (req: Request, res: Response) => {
+  try {
+    const { password } = req.body as { password?: string };
+    const data = await userServices.disableMfa(req.userId!, password ?? '');
+    res.status(StatusCode.OK).json({ success: true, message: 'Two-factor authentication is off', data });
   } catch (error) {
     sendErrorResponse(res, error);
   }
@@ -198,6 +255,10 @@ export default {
   forgotPassword,
   resetPassword,
   loginUser,
+  verifyMfa,
+  setupMfa,
+  enableMfa,
+  disableMfa,
   logoutUser,
   getAllUser,
   getUserById,

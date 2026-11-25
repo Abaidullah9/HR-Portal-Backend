@@ -74,20 +74,6 @@ const getAppraisalById = async (req: Request, res: Response) => {
  * authorised on an action every role holds and scoped to the caller's own
  * employee record rather than an id from the request.
  */
-const getMyAppraisals = async (req: Request, res: Response) => {
-  try {
-    const scope = await resolveReadScope(req.userId!);
-    const data = scope.ownEmployeeId
-      ? await appraisalServices.getAppraisalsByEmployee(scope.ownEmployeeId, scope)
-      : [];
-    res
-      .status(StatusCode.OK)
-      .json({ success: true, message: MESSAGES.ALL_APPRAISALS_FETCHED_SUCCESSFULLY, data });
-  } catch (error) {
-    sendErrorResponse(res, error);
-  }
-};
-
 const getAppraisalByEmployee = async (req: Request, res: Response) => {
   try {
     const { employeeId } = req.params;
@@ -243,7 +229,6 @@ const lock = async (req: Request, res: Response) => {
 };
 
 export default {
-  getMyAppraisals,
   submitSelfReview,
   submitManagerReview,
   calibrate,

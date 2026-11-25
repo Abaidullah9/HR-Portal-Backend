@@ -10,6 +10,8 @@ import { generateToken } from '../utils/helper/helper.functions';
 import { getPagination, paginatedResult, PaginationQuery } from '../utils/common';
 import { tenantFilter, tenantFields } from '../utils/context';
 import { frontendUrl, sendMail } from '../utils/mailer';
+import jwt from 'jsonwebtoken';
+import { generateSecret, otpauthUrl, verifyTotp } from '../utils/totp';
 
 const hashToken = (token: string) => crypto.createHash('sha256').update(token).digest('hex');
 
@@ -106,14 +108,97 @@ const loginUser = async (email: string, password: string) => {
     throw new AppError('This account has not been activated yet. Use the invite link in your email.', StatusCode.FORBIDDEN);
   }
 
+  // With two-factor on, a correct password only earns a five-minute token for
+  // the code step: no session cookie is issued until the code is verified.
+  if (user.mfaEnabled) {
+    return { mfaRequired: true as const, mfaToken: issueMfaToken(user._id.toString()) };
+  }
+
   user.lastLogin = new Date();
   await user.save();
 
   const user_obj = user.toObject();
-  const { password: _, ...userData } = user_obj;
+  const { password: _, mfaSecret: __, ...userData } = user_obj;
   const token = generateToken(user._id.toString(), user.tokenVersion ?? 0);
 
   return { user: userData, token };
+};
+
+const MFA_PURPOSE = 'mfa';
+
+const issueMfaToken = (userId: string): string =>
+  jwt.sign({ userId, purpose: MFA_PURPOSE }, process.env.JWT_SECRET!, { expiresIn: '5m' });
+
+const readMfaToken = (token: string): string => {
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as jwt.JwtPayload;
+    if (decoded.purpose !== MFA_PURPOSE || typeof decoded.userId !== 'string') throw new Error('wrong purpose');
+    return decoded.userId;
+  } catch {
+    throw new AppError('This sign-in attempt has expired. Sign in again.', StatusCode.UNAUTHORIZED);
+  }
+};
+
+/** Second half of a two-factor sign-in: exchanges the challenge token for a session. */
+const verifyMfaLogin = async (mfaToken: string, code: string) => {
+  if (!mfaToken || !code) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
+
+  const userId = readMfaToken(mfaToken);
+  const user = await userModel.findById(userId).select('+mfaSecret');
+  if (!user || !user.isActive || !user.mfaEnabled || !user.mfaSecret) {
+    throw new AppError(MESSAGES.INVALID_CREDENTIALS, StatusCode.UNAUTHORIZED);
+  }
+  if (!verifyTotp(user.mfaSecret, code)) {
+    throw new AppError('That code is not valid. Use the current code from your authenticator app.', StatusCode.UNAUTHORIZED);
+  }
+
+  user.lastLogin = new Date();
+  await user.save();
+
+  const { password: _, mfaSecret: __, ...safe } = user.toObject();
+  return { user: safe, token: generateToken(user._id.toString(), user.tokenVersion ?? 0) };
+};
+
+/** Starts enrolment: stores a pending secret and returns it for the app to scan. */
+const setupMfa = async (userId: string) => {
+  const user = await userModel.findById(userId).select('+mfaSecret');
+  if (!user) throw new AppError(MESSAGES.USER_NOT_FOUND, StatusCode.NOT_FOUND);
+  if (user.mfaEnabled) throw new AppError('Two-factor authentication is already on', StatusCode.CONFLICT);
+
+  const secret = generateSecret();
+  user.mfaSecret = secret;
+  await user.save();
+
+  return { secret, otpauthUrl: otpauthUrl(secret, user.email) };
+};
+
+/** Completes enrolment once the app produces a matching code. */
+const enableMfa = async (userId: string, code: string) => {
+  const user = await userModel.findById(userId).select('+mfaSecret');
+  if (!user) throw new AppError(MESSAGES.USER_NOT_FOUND, StatusCode.NOT_FOUND);
+  if (user.mfaEnabled) throw new AppError('Two-factor authentication is already on', StatusCode.CONFLICT);
+  if (!user.mfaSecret) throw new AppError('Start the two-factor setup first', StatusCode.BAD_REQUEST);
+  if (!verifyTotp(user.mfaSecret, code)) {
+    throw new AppError('That code did not match. Check the app and try the current code.', StatusCode.BAD_REQUEST);
+  }
+
+  user.mfaEnabled = true;
+  await user.save();
+  return { mfaEnabled: true };
+};
+
+/** Turns two-factor off; the password is re-checked because this weakens the account. */
+const disableMfa = async (userId: string, password: string) => {
+  if (!password) throw new AppError('Enter your password to turn off two-factor', StatusCode.BAD_REQUEST);
+
+  const user = await userModel.findById(userId).select('+password');
+  if (!user) throw new AppError(MESSAGES.USER_NOT_FOUND, StatusCode.NOT_FOUND);
+
+  const matches = await bcrypt.compare(password, user.password);
+  if (!matches) throw new AppError('Your password is not correct', StatusCode.BAD_REQUEST);
+
+  await userModel.updateOne({ _id: userId }, { $set: { mfaEnabled: false }, $unset: { mfaSecret: 1 } });
+  return { mfaEnabled: false };
 };
 
 /** Consumes an invite: sets the password and clears the token in one write. */
@@ -326,6 +411,10 @@ export default {
   inviteUser,
   acceptInvite,
   loginUser,
+  verifyMfaLogin,
+  setupMfa,
+  enableMfa,
+  disableMfa,
   forgotPassword,
   resetPassword,
   changePassword,

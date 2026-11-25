@@ -105,6 +105,7 @@ const endpoints: Endpoint[] = routeFiles.flatMap((file) => {
 const PUBLIC_ROUTES = new Set([
   'POST /users/register',
   'POST /users/login',
+  'POST /users/login/mfa',
   'POST /users/accept-invite',
   'POST /users/forgot-password',
   'POST /users/reset-password',
@@ -125,6 +126,10 @@ const SELF_SERVICE_ROUTES = new Set([
   'POST /notifications/:id/read',
   'GET /search',
   'GET /dashboard/summary',
+  // Two-factor enrolment acts only on the caller's own account.
+  'POST /users/mfa/setup',
+  'POST /users/mfa/enable',
+  'POST /users/mfa/disable',
 ]);
 
 /** Action catalogue and role grants, read from the seed so they stay in step. */
@@ -147,7 +152,11 @@ const selfServiceGrants = moduleList('selfServiceActions');
 
 const ROLE_GRANTS: Record<string, string[]> = {
   Admin: [...ACTION_CATALOGUE],
-  HR: [...grantsByModule(moduleList('hrModules')), ...selfServiceGrants],
+  HR: [
+    ...grantsByModule(moduleList('hrModules')),
+    ...moduleList('hrExtraActions'),
+    ...selfServiceGrants,
+  ],
   Manager: [...grantsByModule(moduleList('managerModules')), ...selfServiceGrants],
   Employee: [
     ...grantsByModule(moduleList('employeeModules')).filter(
@@ -190,16 +199,33 @@ describe('authorization matrix — route guards', () => {
     expect(endpoints.length).toBeGreaterThan(100);
   });
 
-  it('registers every endpoint once, apart from the known shadowed route', () => {
+  it('registers every endpoint exactly once', () => {
     const counts = new Map<string, number>();
     for (const endpoint of endpoints) counts.set(endpoint.key, (counts.get(endpoint.key) ?? 0) + 1);
     const duplicates = [...counts].filter(([, count]) => count > 1).map(([key]) => key).sort();
 
-    // hrInsightsRoutes is mounted at "/" before appraisalRoutes, so its
-    // /appraisals/me wins and appraisalController.getMyAppraisals is dead code.
-    // Same action and same scope, so not a security hole — but a trap for the
-    // next person who edits the handler that never runs.
-    expect(duplicates).toEqual(['GET /appraisals/me']);
+    expect(duplicates).toEqual([]);
+  });
+
+  it('gates every own-record route on a self-service action', () => {
+    // Borrowing another module's read grant (read_LeaveRequest was the usual
+    // donor) meant a role could lose its own records if that unrelated module
+    // was revoked, or gain this surface as a side effect of gaining one.
+    const ownRoutes = endpoints.filter(
+      (endpoint) => endpoint.action && /\/me(\/|$)/.test(endpoint.path),
+    );
+    const borrowed = ownRoutes
+      .filter((endpoint) => !selfServiceGrants.includes(endpoint.action!))
+      .map((endpoint) => `${endpoint.key} -> ${endpoint.action}`);
+
+    expect(borrowed).toEqual([]);
+  });
+
+  it('authorises goal self-service on the goal actions', () => {
+    expect(endpoints.find((e) => e.key === 'GET /goals')?.action).toBe('read_OwnGoal');
+    expect(endpoints.find((e) => e.key === 'PATCH /goals/:_id/progress')?.action).toBe(
+      'update_OwnGoalProgress',
+    );
   });
 
   it('keeps the dashboard gated per module inside the service', () => {
@@ -271,13 +297,12 @@ describe('authorization matrix — role × endpoint', () => {
     expect(allowed('Manager', 'update_Role')).toBe(false);
   });
 
-  it('documents which payroll lifecycle steps no non-admin role can reach', () => {
-    // Payroll runs are generated with create_Payroll (HR) but approved, paid and
-    // reversed with update_PayrollStatus, which the seed's `_Payroll` suffix
-    // filter does not match. This test pins the current grants so a fix is
-    // visible here rather than discovered in production.
+  it('lets HR finish the payroll lifecycle', () => {
+    // The `_Payroll` suffix filter cannot match update_PayrollStatus, so the
+    // seed grants it explicitly; without it HR could create a payroll run but
+    // never approve or mark one paid.
     const canApprove = ROLE_NAMES.filter((role) => ROLE_GRANTS[role]!.includes('update_PayrollStatus'));
-    expect(canApprove).toEqual(['Admin']);
+    expect(canApprove).toEqual(['Admin', 'HR']);
   });
 });
 

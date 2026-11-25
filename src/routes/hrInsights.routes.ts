@@ -51,30 +51,30 @@ router.post(
 );
 
 // Self-service: each handler derives the employee from the session, so the
-// caller can only ever reach their own records. Every seeded role holds
-// read_LeaveRequest, which keeps these off a grant a role might lack.
+// caller can only ever reach their own records. Each route names its own
+// self-service action rather than borrowing another module's read grant.
 router.get(
   '/leave-balances/me',
   isAuthenticated,
-  authorize('read_LeaveRequest'),
+  authorize('read_OwnLeaveBalance'),
   hrInsightsController.ownBalances,
 );
 router.get(
   '/attendance/me',
   isAuthenticated,
-  authorize('read_Attendance'),
+  authorize('read_OwnAttendance'),
   hrInsightsController.ownAttendance,
 );
 router.get(
   '/appraisals/me',
   isAuthenticated,
-  authorize('read_LeaveRequest'),
+  authorize('read_OwnAppraisal'),
   hrInsightsController.ownAppraisals,
 );
 router.get(
   '/employees/me',
   isAuthenticated,
-  authorize('read_LeaveRequest'),
+  authorize('read_OwnProfile'),
   hrInsightsController.ownEmployee,
 );
 

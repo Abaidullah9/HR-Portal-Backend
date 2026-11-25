@@ -124,15 +124,21 @@ const updateAttendance = async (
     throw new AppError(MESSAGES.NOT_AUTHORIZED, StatusCode.FORBIDDEN);
   }
 
+  // Changing a recorded time is a correction, not an edit: it has to say why,
+  // because these hours feed payroll and the note is what makes it auditable.
+  const note = updateData.regularizationNote?.trim();
+  const changesTime = Boolean(updateData.checkIn || updateData.checkOut);
+  if (changesTime && !note) {
+    throw new AppError(
+      'Add a note explaining the attendance correction',
+      StatusCode.BAD_REQUEST,
+    );
+  }
+
   const updatedAttendance = await attendanceModel
     .findByIdAndUpdate(
       _id,
-      {
-        ...updateData,
-        ...(updateData.checkIn || updateData.checkOut
-          ? { regularized: true, ...(updateData.regularizationNote ? { regularizationNote: updateData.regularizationNote } : {}) }
-          : {}),
-      },
+      changesTime ? { ...updateData, regularized: true, regularizationNote: note } : updateData,
       { returnDocument: 'after' },
     )
     .populate('employeeId', 'name email employeeCode');

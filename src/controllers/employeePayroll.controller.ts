@@ -8,6 +8,7 @@ import { CreatePayrollDTO, UpdatePayrollDTO } from "../utils/dtos/employeePayrol
 import { PaginationQuery } from "../utils/common";
 import { recordAudit } from "../utils/helper/audit";
 import { resolveReadScope } from "../utils/helper/ownership";
+import { buildPayslipPdf, type PayslipDocument } from "../utils/payslip-pdf";
 
 const addPayroll = async (req: Request, res: Response) => {
   try {
@@ -135,6 +136,24 @@ const getPayslip = async (req: Request, res: Response) => {
   }
 };
 
+/** Streams the payslip as a PDF; the scope check is the one the JSON view uses. */
+const downloadPayslip = async (req: Request, res: Response) => {
+  try {
+    const scope = await resolveReadScope(req.userId!);
+    const payslip = await employeePayrollServices.getPayslip(req.params._id as string, scope);
+    const pdf = await buildPayslipPdf(payslip as unknown as PayslipDocument);
+
+    const slug = payslip.employee.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+    const period = new Date(payslip.periodStart).toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="payslip-${slug}-${period}.pdf"`);
+    res.setHeader('Content-Length', String(pdf.length));
+    res.send(pdf);
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
+
 const getOwnPayslips = async (req: Request, res: Response) => {
   try {
     const data = await employeePayrollServices.getOwnPayslips(req.userId!);
@@ -146,6 +165,7 @@ const getOwnPayslips = async (req: Request, res: Response) => {
 
 export default {
   getPayslip,
+  downloadPayslip,
   getOwnPayslips,
   addPayroll,
   getAllPayroll,

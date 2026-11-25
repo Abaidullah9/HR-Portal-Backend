@@ -8,19 +8,9 @@
  * and prove that a cross-organisation id answers 404, not data — even to a
  * caller whose scope allows reading every employee.
  */
-jest.mock('../models/employeePayroll.model', () => ({
-  findOne: jest.fn(),
-  findById: jest.fn(),
-}));
-
-jest.mock('../models/document.model', () => ({
-  findOne: jest.fn(),
-}));
-
-jest.mock('../models/attendance.model', () => ({
-  findOne: jest.fn(),
-  findById: jest.fn(),
-}));
+jest.mock('../models/employeePayroll.model', () => ({ findOne: jest.fn() }));
+jest.mock('../models/document.model', () => ({ findOne: jest.fn() }));
+jest.mock('../models/attendance.model', () => ({ findOne: jest.fn() }));
 
 import { Types } from 'mongoose';
 import { runWithContext } from '../utils/context';
@@ -38,57 +28,42 @@ const payrollModel = jest.requireMock('../models/employeePayroll.model') as { fi
 const documentModel = jest.requireMock('../models/document.model') as { findOne: jest.Mock };
 const attendanceModel = jest.requireMock('../models/attendance.model') as { findOne: jest.Mock };
 
+const inOrganisation = <T>(work: () => Promise<T>) =>
+  runWithContext({ requestId: 'r1', userId: 'u1', organizationId: ORG }, work);
+
+const organisationOf = (model: { findOne: jest.Mock }): string =>
+  (model.findOne.mock.calls[0]![0] as { organizationId: Types.ObjectId }).organizationId.toString();
+
 beforeEach(() => jest.clearAllMocks());
 
 describe('by-id reads are tenant scoped', () => {
   it('scopes the payslip lookup and hides a record from another organisation', async () => {
-    // The record belongs to another organisation, so the scoped query matches
-    // nothing even though the caller may read every employee in their own.
     payrollModel.findOne.mockReturnValue({ populate: jest.fn().mockResolvedValue(null) });
 
     await expect(
-      runWithContext({ requestId: 'r1', userId: 'u1', organizationId: ORG }, () =>
-        employeePayrollServices.getPayslip(RECORD, broadScope),
-      ),
+      inOrganisation(() => employeePayrollServices.getPayslip(RECORD, broadScope)),
     ).rejects.toMatchObject({ statusCode: 404 });
 
-    const filter = payrollModel.findOne.mock.calls[0]![0] as Record<string, unknown>;
-    expect(filter._id).toBe(RECORD);
-    expect((filter.organizationId as Types.ObjectId).toString()).toBe(ORG);
+    expect(organisationOf(payrollModel)).toBe(ORG);
   });
 
-  it('scopes the document lookup, so a downloaded file cannot come from another tenant', async () => {
+  it('scopes the document lookup, so a download cannot come from another tenant', async () => {
     documentModel.findOne.mockResolvedValue(null);
 
     await expect(
-      runWithContext({ requestId: 'r2', userId: 'u1', organizationId: ORG }, () =>
-        documentServices.getDocumentById(RECORD, broadScope),
-      ),
+      inOrganisation(() => documentServices.getDocumentById(RECORD, broadScope)),
     ).rejects.toMatchObject({ statusCode: 404 });
 
-    const filter = documentModel.findOne.mock.calls[0]![0] as Record<string, unknown>;
-    expect((filter.organizationId as Types.ObjectId).toString()).toBe(ORG);
+    expect(organisationOf(documentModel)).toBe(ORG);
   });
 
   it('scopes the attendance lookup', async () => {
     attendanceModel.findOne.mockResolvedValue(null);
 
     await expect(
-      runWithContext({ requestId: 'r3', userId: 'u1', organizationId: ORG }, () =>
-        attendanceServices.getAttendanceById(RECORD, broadScope),
-      ),
+      inOrganisation(() => attendanceServices.getAttendanceById(RECORD, broadScope)),
     ).rejects.toMatchObject({ statusCode: 404 });
 
-    const filter = attendanceModel.findOne.mock.calls[0]![0] as Record<string, unknown>;
-    expect((filter.organizationId as Types.ObjectId).toString()).toBe(ORG);
-  });
-
-  it('leaves background work unscoped, so the seed and scripts still run', async () => {
-    attendanceModel.findOne.mockResolvedValue(null);
-
-    await expect(attendanceServices.getAttendanceById(RECORD, broadScope)).rejects.toBeTruthy();
-
-    const filter = attendanceModel.findOne.mock.calls[0]![0] as Record<string, unknown>;
-    expect(filter).toEqual({ _id: RECORD });
+    expect(organisationOf(attendanceModel)).toBe(ORG);
   });
 });

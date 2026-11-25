@@ -142,7 +142,6 @@ const updateAttendance = async (
 
   const updatedAttendance = await attendanceModel
     .findOneAndUpdate(tenantFilter({ _id }),
-      
       overwritesRecordedTime ? { ...fields, regularized: true, regularizationNote: note } : fields,
       { returnDocument: 'after' },
     )

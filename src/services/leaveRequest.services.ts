@@ -232,7 +232,6 @@ const updateLeaveRequest = async (
 
   const updatedRequest = await leaveRequestModel
     .findOneAndUpdate(tenantFilter({ _id }),
-      
       { ...updateData, workingDays: days },
       { returnDocument: 'after' },
     )

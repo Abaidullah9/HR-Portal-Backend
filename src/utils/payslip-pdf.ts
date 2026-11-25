@@ -30,11 +30,13 @@ export interface PayslipDocument {
 const PAGE_MARGIN = 50;
 const CONTENT_WIDTH = 595.28 - PAGE_MARGIN * 2;
 
-const money = (value: number, currency?: string): string =>
-  `${currency ? `${currency} ` : ''}${value.toLocaleString('en-US', {
+const money = (value: number, currency?: string): string => {
+  const amount = value.toLocaleString('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  })}`;
+  });
+  return currency ? `${currency} ${amount}` : amount;
+};
 
 const day = (value: string | Date | null | undefined): string => {
   if (!value) return '--';

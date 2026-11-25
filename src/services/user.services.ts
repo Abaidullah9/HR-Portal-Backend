@@ -383,7 +383,6 @@ const updateUserStatus = async (_id: string, isActive: boolean) => {
   // revive old cookies.
   const updatedUser = await userModel
     .findOneAndUpdate(tenantFilter({ _id }),
-      
       { $set: { isActive }, ...(isActive ? {} : { $inc: { tokenVersion: 1 } }) },
       { returnDocument: 'after' },
     )

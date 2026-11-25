@@ -9,14 +9,10 @@
 jest.mock('../models/payrollRun.model', () => ({
   findOne: jest.fn(),
   create: jest.fn(),
-  find: jest.fn(),
-  countDocuments: jest.fn(),
 }));
 
 jest.mock('../models/employeePayroll.model', () => ({
   insertMany: jest.fn(),
-  find: jest.fn(),
-  updateMany: jest.fn(),
 }));
 
 jest.mock('../models/employee.model', () => ({
@@ -31,10 +27,10 @@ jest.mock('../services/compensation.services', () => ({
   },
 }));
 
-jest.mock('../services/organizationSetting.services', () => ({
-  __esModule: true,
-  default: { organizationCurrency: jest.fn() },
-}));
+jest.mock('../services/organizationSetting.services', () => {
+  const organizationCurrency = jest.fn();
+  return { __esModule: true, organizationCurrency, default: { organizationCurrency } };
+});
 
 jest.mock('../services/notification.services', () => ({
   __esModule: true,
@@ -63,7 +59,7 @@ const employee = {
   employeeCode: 'EMP-0002',
 };
 
-const run = { _id: 'run1', employeeCount: 0, totalNetPay: 0, save: jest.fn() };
+const run = { _id: 'run1' };
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -102,9 +98,10 @@ describe('payroll run currency', () => {
     expect(payroll.insertMany).toHaveBeenCalledWith([
       expect.objectContaining({ currency: 'PKR', netPay: 190000 }),
     ]);
+    expect(runModel.create).toHaveBeenCalledWith(
+      expect.objectContaining({ employeeCount: 1, totalNetPay: 190000, currency: 'PKR' }),
+    );
     expect(result.created).toBe(1);
-    expect(run.totalNetPay).toBe(190000);
-    expect(run.employeeCount).toBe(1);
   });
 
   it('honours an explicit run currency instead of the organisation default', async () => {

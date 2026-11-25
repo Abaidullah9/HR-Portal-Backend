@@ -17,7 +17,7 @@ const createOrUpdateOrganization = async (settingsData: CreateOrganizationSettin
   const settings = await organizationSettingModel.findOneAndUpdate(
     tenantFilter(),
     { ...settingsData, ...tenantFields() },
-    { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
+    { upsert: true, returnDocument: 'after' }
   );
   return settings;
 };
@@ -57,5 +57,4 @@ export default {
   createOrUpdateOrganization,
   updateOrganizationSettings,
   deleteOrganizationSettings,
-  organizationCurrency,
 };

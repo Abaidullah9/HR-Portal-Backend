@@ -8,7 +8,7 @@
  * timestamp is genuinely needed.
  */
 
-/** Pakistan has no daylight saving, so one fixed zone is enough for the pilot. */
+/** The office timezone calendar days are measured in; override per deployment. */
 export const ORGANIZATION_TIMEZONE = () => process.env.ORGANIZATION_TIMEZONE || 'Asia/Karachi';
 
 const formatterCache = new Map<string, Intl.DateTimeFormat>();

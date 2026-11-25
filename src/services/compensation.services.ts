@@ -73,11 +73,12 @@ export const salaryEffectiveOn = async (employeeId: string, day: string): Promis
   return employee?.salary;
 };
 
-export const currencyFor = async (employeeId: string): Promise<string> => {
+/** The currency on the employee's latest compensation row, when one exists. */
+export const currencyFor = async (employeeId: string): Promise<string | undefined> => {
   const record = await compensationModel
     .findOne(tenantFilter({ employeeId }))
     .sort({ effectiveFrom: -1 });
-  return (record?.currency ?? (await organizationCurrency())).toUpperCase();
+  return record?.currency;
 };
 
 export default {

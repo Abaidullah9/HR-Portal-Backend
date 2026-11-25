@@ -40,6 +40,7 @@ export const notifyPayslipCompleted = (record: NotifiablePayslip): void => {
   const link = `${frontendUrl()}/me`;
   const period = `${day(record.payPeriodStart)} – ${day(record.payPeriodEnd)}`;
   const name = employee.name ?? 'there';
+  const label = record.currency ? `${record.currency} payslip` : 'payslip';
 
   void sendMail({
     to: email,
@@ -47,7 +48,7 @@ export const notifyPayslipCompleted = (record: NotifiablePayslip): void => {
     text: [
       `Hello ${name},`,
       '',
-      `Your ${record.currency ? `${record.currency} ` : ''}payslip for ${period} has been marked as paid and is available in the HR portal:`,
+      `Your ${label} for ${period} has been marked as paid and is available in the HR portal:`,
       link,
       '',
       'Sign in to view or download it as a PDF.',

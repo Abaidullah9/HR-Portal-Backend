@@ -4,7 +4,7 @@ import payrollModel from '../models/employeePayroll.model';
 import employeeModel from '../models/employee.model';
 import compensationServices from './compensation.services';
 import notificationServices from './notification.services';
-import organizationSettingServices from './organizationSetting.services';
+import { organizationCurrency } from './organizationSetting.services';
 import { AppError } from '../utils/helper/AppError';
 import { StatusCode } from '../utils/helper/constants/enum';
 import { tenantFields, tenantFilter } from '../utils/context';
@@ -40,8 +40,7 @@ export const generateRun = async (input: GenerateRunInput, actorId?: string) => 
     throw new AppError('The pay period end must be after its start', StatusCode.BAD_REQUEST);
   }
 
-  const runCurrency = (input.currency?.trim().toUpperCase()
-    || (await organizationSettingServices.organizationCurrency()));
+  const runCurrency = input.currency?.trim().toUpperCase() || (await organizationCurrency());
 
   if (!/^[A-Z]{3}$/.test(runCurrency)) {
     throw new AppError('The run currency must be a three-letter ISO code', StatusCode.BAD_REQUEST);
@@ -75,7 +74,8 @@ export const generateRun = async (input: GenerateRunInput, actorId?: string) => 
       continue;
     }
 
-    const currency = await compensationServices.currencyFor(employee._id.toString());
+    // An employee with no compensation row is paid in the organisation currency.
+    const currency = (await compensationServices.currencyFor(employee._id.toString())) ?? runCurrency;
     if (currency !== runCurrency) {
       throw new AppError(
         `This run is in ${runCurrency}, but ${employee.name} (${employee.employeeCode ?? employee._id}) is paid in ${currency}. One run cannot mix currencies.`,
@@ -83,18 +83,20 @@ export const generateRun = async (input: GenerateRunInput, actorId?: string) => 
       );
     }
 
-    priced.push({ employeeId: employee._id, salary });
+    priced.push({ employeeId: employee._id, salary: roundMoney(salary) });
   }
 
   // Every rejection above happens before the run exists, so a refused run leaves
   // no draft behind for somebody to reverse.
+  const totalNetPay = roundMoney(priced.reduce((total, item) => total + item.salary, 0));
+
   const run = await payrollRunModel.create({
     ...tenantFields(),
     periodStart: input.periodStart,
     periodEnd: input.periodEnd,
     status: 'draft',
-    employeeCount: 0,
-    totalNetPay: 0,
+    employeeCount: priced.length,
+    totalNetPay,
     currency: runCurrency,
     ...(input.notes ? { notes: input.notes } : {}),
     ...(actorId ? { createdBy: actorId } : {}),
@@ -104,25 +106,21 @@ export const generateRun = async (input: GenerateRunInput, actorId?: string) => 
     ...tenantFields(),
     employeeId,
     payRunId: run._id,
-    baseSalary: roundMoney(salary),
+    baseSalary: salary,
     currency: runCurrency,
     allowances: [],
     deductions: [],
     bonuses: [],
-    netPay: roundMoney(salary),
+    netPay: salary,
     payPeriodStart: startOfDay(input.periodStart),
     payPeriodEnd: startOfDay(input.periodEnd),
     paymentMethod: 'bank transfer' as const,
     status: 'pending' as const,
   }));
 
-  if (records.length > 0) await payrollModel.insertMany(records);
-
-  run.employeeCount = records.length;
-  run.totalNetPay = roundMoney(records.reduce((total, record) => total + record.netPay, 0));
-  await run.save();
-
   if (records.length > 0) {
+    await payrollModel.insertMany(records);
+
     notificationServices.notifySafely(
       notificationServices.notifyUsersWithAction('read_Payroll', {
         title: `Payroll draft ready for ${records.length} employee${records.length === 1 ? '' : 's'}`,

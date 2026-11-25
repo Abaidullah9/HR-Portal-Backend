@@ -7,6 +7,7 @@ import { getPagination, paginatedResult, PaginationQuery } from "../utils/common
 import employeeModel from "../models/employee.model";
 import { canAccessEmployee, scopeEmployeeFilter, type ReadScope } from "../utils/helper/ownership";
 import { tenantFields, tenantFilter } from "../utils/context";
+import { notifyPayslipCompleted } from "./payslipNotification.services";
 
 const addPayroll = async (payrollData: CreatePayrollDTO) => {
   if (!payrollData) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
@@ -146,12 +147,22 @@ const updatePayroll = async (_id: string, updateData: Partial<CreatePayrollDTO>)
 const updatePayrollStatus = async (_id: string, status: string) => {
   if (!_id || !status) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
+  // The previous status decides whether this is the transition into "paid" that
+  // should notify the employee; re-saving a completed record must not re-send.
+  const existing = await employeePayrollModel.findOne(tenantFilter({ _id }));
+  if (!existing) throw new AppError(MESSAGES.PAYROLL_NOT_FOUND, StatusCode.NOT_FOUND);
+
   const updatedPayroll = await employeePayrollModel.findOneAndUpdate(
     tenantFilter({ _id }),
     { status },
     { returnDocument: 'after' },
   ).populate("employeeId", "name email employeeCode position");
   if (!updatedPayroll) throw new AppError(MESSAGES.PAYROLL_NOT_FOUND, StatusCode.NOT_FOUND);
+
+  // Not awaited on purpose: a mail outage must never fail or slow this update.
+  if (status === 'completed' && existing.status !== 'completed') {
+    notifyPayslipCompleted(updatedPayroll);
+  }
 
   return updatedPayroll;
 };

@@ -34,7 +34,7 @@ const getAllDocument = async (query: PaginationQuery & { employeeId?: string }, 
 const getDocumentById = async (_id: string, scope: ReadScope) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const documentById = await documentModel.findById(_id);
+  const documentById = await documentModel.findOne(tenantFilter({ _id }));
   if (!documentById) throw new AppError(MESSAGES.DOCUMENT_NOT_FOUND, StatusCode.NOT_FOUND);
   if (!canAccessEmployee(scope, documentById.employeeId.toString())) {
     throw new AppError(MESSAGES.NOT_AUTHORIZED, StatusCode.FORBIDDEN);
@@ -81,14 +81,14 @@ const getDocumentsByType = async (employeeId: string, type: string, scope: ReadS
 const updateDocument = async (_id: string, updateData: Partial<CreateDocumentDTO>, scope: ReadScope) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const existingDocument = await documentModel.findById(_id);
+  const existingDocument = await documentModel.findOne(tenantFilter({ _id }));
   if (!existingDocument) throw new AppError(MESSAGES.DOCUMENT_NOT_FOUND, StatusCode.NOT_FOUND);
   if (!canAccessEmployee(scope, existingDocument.employeeId.toString())) {
     throw new AppError(MESSAGES.NOT_AUTHORIZED, StatusCode.FORBIDDEN);
   }
 
   const updatedDocument = await documentModel
-    .findByIdAndUpdate(_id, updateData, { returnDocument: 'after' })
+    .findOneAndUpdate(tenantFilter({ _id }), updateData, { returnDocument: 'after' })
     .populate('employeeId', 'name email employeeCode')
     .populate('uploadedBy', 'name email');
   if (!updatedDocument) throw new AppError(MESSAGES.DOCUMENT_NOT_FOUND, StatusCode.NOT_FOUND);
@@ -99,13 +99,13 @@ const updateDocument = async (_id: string, updateData: Partial<CreateDocumentDTO
 const deleteDocument = async (_id: string, scope: ReadScope) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const existingDocument = await documentModel.findById(_id);
+  const existingDocument = await documentModel.findOne(tenantFilter({ _id }));
   if (!existingDocument) throw new AppError(MESSAGES.DOCUMENT_NOT_FOUND, StatusCode.NOT_FOUND);
   if (!canAccessEmployee(scope, existingDocument.employeeId.toString())) {
     throw new AppError(MESSAGES.NOT_AUTHORIZED, StatusCode.FORBIDDEN);
   }
 
-  return documentModel.findByIdAndDelete(_id);
+  return documentModel.findOneAndDelete(tenantFilter({ _id }));
 };
 
 /** Retention: documents past their retention date are removed by the scheduler. */

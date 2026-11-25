@@ -27,7 +27,7 @@ const getAllPayroll = async (query: PaginationQuery, scope?: ReadScope) => {
 const getPayrollById = async (_id: string, scope?: ReadScope) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const payrollById = await employeePayrollModel.findById(_id).populate("employeeId", "name email employeeCode position");
+  const payrollById = await employeePayrollModel.findOne(tenantFilter({ _id })).populate("employeeId", "name email employeeCode position");
   if (!payrollById) throw new AppError(MESSAGES.PAYROLL_NOT_FOUND, StatusCode.NOT_FOUND);
   if (scope && !canAccessEmployee(scope, (payrollById.employeeId as unknown as { _id?: { toString(): string } })?._id?.toString() ?? '')) {
     throw new AppError(MESSAGES.NOT_AUTHORIZED, StatusCode.FORBIDDEN);
@@ -87,6 +87,7 @@ const buildPayslip = (record: any) => {
     periodStart: record.payPeriodStart,
     periodEnd: record.payPeriodEnd,
     paymentMethod: record.paymentMethod,
+    currency: record.currency ?? 'PKR',
     status: record.status,
     datePaid: record.datePaid,
     earnings: [
@@ -109,7 +110,7 @@ const getPayslip = async (_id: string, scope?: ReadScope) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
   const record = await employeePayrollModel
-    .findById(_id)
+    .findOne(tenantFilter({ _id }))
     .populate("employeeId", "name email employeeCode position");
   if (!record) throw new AppError(MESSAGES.PAYROLL_NOT_FOUND, StatusCode.NOT_FOUND);
 

@@ -1,5 +1,5 @@
 jest.mock('../models/employeePayroll.model', () => ({
-  findById: jest.fn(),
+  findOne: jest.fn(),
   find: jest.fn(),
   countDocuments: jest.fn(),
   create: jest.fn(),
@@ -37,7 +37,7 @@ describe('Payslips', () => {
   });
 
   it('derives gross and net pay from the line items', async () => {
-    payrollModel.findById.mockReturnValue({
+    payrollModel.findOne.mockReturnValue({
       populate: jest.fn().mockResolvedValue(record),
     });
 

@@ -1,7 +1,7 @@
 jest.mock('../models/attendance.model', () => ({
   find: jest.fn(),
   countDocuments: jest.fn(),
-  findById: jest.fn(),
+  findOne: jest.fn(),
 }));
 jest.mock('../models/employee.model', () => ({
   findOne: jest.fn(),
@@ -72,9 +72,10 @@ describe('Attendance services', () => {
       { canReadAll: true },
     );
 
-    // Days are resolved in the organisation timezone (UTC by default), not the
+    // Days are resolved in the organisation timezone (Asia/Karachi by default),
     // server's local timezone.
-    const start = new Date(Date.UTC(2026, 4, 9));
+    // Pakistan Standard Time is UTC+5, so the local day starts at 19:00 UTC.
+    const start = new Date(Date.UTC(2026, 4, 8, 19));
     expect(captured.date).toBeDefined();
     expect(captured.date.$gte.getTime()).toBe(start.getTime());
     expect(captured.date.$lt.getTime()).toBe(start.getTime() + 24 * 60 * 60 * 1000);
@@ -92,7 +93,8 @@ describe('Attendance services', () => {
       canReadAll: true,
     });
 
-    const start = new Date(Date.UTC(2026, 4, 9));
+    // Pakistan Standard Time is UTC+5, so the local day starts at 19:00 UTC.
+    const start = new Date(Date.UTC(2026, 4, 8, 19));
     expect(captured.date.$gte.getTime()).toBe(start.getTime());
     expect(captured.date.$lt.getTime()).toBe(start.getTime() + 24 * 60 * 60 * 1000);
   });
@@ -118,7 +120,7 @@ describe('Attendance services', () => {
       employeeId: { toString: () => 'other' },
       populate: jest.fn().mockResolvedValue(undefined),
     };
-    attendanceModel.findById.mockResolvedValue(doc);
+    attendanceModel.findOne.mockResolvedValue(doc);
 
     await expect(
       attendanceServices.getAttendanceById('a1', { canReadAll: false, ownEmployeeId: 'emp1' }),

@@ -25,7 +25,7 @@ const getAllLeaveBalance = async (query: PaginationQuery) => {
 const getLeaveBalanceById = async (_id: string) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const balanceById = await leaveBalanceModel.findById(_id).populate("employeeId", "name email employeeCode");
+  const balanceById = await leaveBalanceModel.findOne(tenantFilter({ _id })).populate("employeeId", "name email employeeCode");
   if (!balanceById) throw new AppError(MESSAGES.LEAVE_BALANCE_NOT_FOUND, StatusCode.NOT_FOUND);
   return balanceById;
 };
@@ -132,7 +132,7 @@ const accrueLeaveBalances = async (now: Date = new Date()) => {
 const updateLeaveBalance = async (_id: string, updateData: Partial<CreateLeaveBalanceDTO>) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const updatedBalance = await leaveBalanceModel.findByIdAndUpdate(_id, updateData, { returnDocument: 'after' }).populate("employeeId", "name email employeeCode");
+  const updatedBalance = await leaveBalanceModel.findOneAndUpdate(tenantFilter({ _id }), updateData, { returnDocument: 'after' }).populate("employeeId", "name email employeeCode");
   if (!updatedBalance) throw new AppError(MESSAGES.LEAVE_BALANCE_NOT_FOUND, StatusCode.NOT_FOUND);
 
   return updatedBalance;
@@ -141,7 +141,7 @@ const updateLeaveBalance = async (_id: string, updateData: Partial<CreateLeaveBa
 const deleteLeaveBalance = async (_id: string) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const deletedBalance = await leaveBalanceModel.findByIdAndDelete(_id);
+  const deletedBalance = await leaveBalanceModel.findOneAndDelete(tenantFilter({ _id }));
 
   return deletedBalance;
 };

@@ -122,7 +122,7 @@ const getAllEmployee = async (
 const getEmployeeById = async (_id: string) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const employeeById = await employeeModel.findById(_id)
+  const employeeById = await employeeModel.findOne(tenantFilter({ _id }))
     .populate('userId', 'name email')
     .populate('departmentId', 'name')
     .populate('reportingManagerId', 'name email');
@@ -171,10 +171,10 @@ const getActiveEmployees = async () => {
 const updateEmployee = async (_id: string, updateData: Partial<CreateEmployeeDTO>) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const before = await employeeModel.findById(_id).select('exitDate isActive');
+  const before = await employeeModel.findOne(tenantFilter({ _id })).select('exitDate isActive');
   if (!before) throw new AppError(MESSAGES.EMPLOYEE_NOT_FOUND, StatusCode.NOT_FOUND);
 
-  const updatedEmployee = await employeeModel.findByIdAndUpdate(_id, updateData, { returnDocument: 'after' })
+  const updatedEmployee = await employeeModel.findOneAndUpdate(tenantFilter({ _id }), updateData, { returnDocument: 'after' })
     .populate('userId', 'name email')
     .populate('departmentId', 'name')
     .populate('reportingManagerId', 'name email');
@@ -200,7 +200,7 @@ const updateEmployee = async (_id: string, updateData: Partial<CreateEmployeeDTO
 const deleteEmployee = async (_id: string) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  return employeeModel.findByIdAndDelete(_id);
+  return employeeModel.findOneAndDelete(tenantFilter({ _id }));
 };
 
 /** Flat hierarchy data for the org chart; the tree is built in the client. */
@@ -236,7 +236,7 @@ const getEmployeeProfile = async (employeeId: string, scope: ReadScope) => {
     throw new AppError(MESSAGES.NOT_AUTHORIZED, StatusCode.FORBIDDEN);
   }
 
-  const employee = await employeeModel.findById(employeeId)
+  const employee = await employeeModel.findOne(tenantFilter({ _id: employeeId }))
     .populate('userId', 'name email isActive lastLogin')
     .populate('departmentId', 'name')
     .populate('reportingManagerId', 'name email position');
@@ -282,7 +282,7 @@ const getEmployeeProfile = async (employeeId: string, scope: ReadScope) => {
 
 /** GDPR access request: everything held about one person, as one JSON document. */
 const exportEmployeeData = async (employeeId: string) => {
-  const employee = await employeeModel.findById(employeeId).lean();
+  const employee = await employeeModel.findOne(tenantFilter({ _id: employeeId })).lean();
   if (!employee) throw new AppError(MESSAGES.EMPLOYEE_NOT_FOUND, StatusCode.NOT_FOUND);
 
   const [user, documents, compensations, balances, leaveRequests, attendance, appraisals, payslips, tasks, goals] =
@@ -324,7 +324,7 @@ const exportEmployeeData = async (employeeId: string) => {
  * statutory retention period.
  */
 const anonymizeEmployee = async (employeeId: string, actorId?: string) => {
-  const employee = await employeeModel.findById(employeeId);
+  const employee = await employeeModel.findOne(tenantFilter({ _id: employeeId }));
   if (!employee) throw new AppError(MESSAGES.EMPLOYEE_NOT_FOUND, StatusCode.NOT_FOUND);
 
   const suffix = employee._id.toString().slice(-6);

@@ -47,7 +47,7 @@ export const notifyPayslipCompleted = (record: NotifiablePayslip): void => {
     text: [
       `Hello ${name},`,
       '',
-      `Your payslip for ${period} has been marked as paid and is available in the HR portal:`,
+      `Your ${record.currency ? `${record.currency} ` : ''}payslip for ${period} has been marked as paid and is available in the HR portal:`,
       link,
       '',
       'Sign in to view or download it as a PDF.',

@@ -26,7 +26,7 @@ const payrollRunSchema = new Schema<IPayrollRun>({
   status: { type: String, enum: ['draft', 'approved', 'paid', 'reversed'], default: 'draft', index: true },
   employeeCount: { type: Number, default: 0 },
   totalNetPay: { type: Number, default: 0 },
-  currency: { type: String, default: 'USD', uppercase: true, trim: true },
+  currency: { type: String, default: 'PKR', uppercase: true, trim: true },
   notes: { type: String, trim: true },
   createdBy: { type: Schema.Types.ObjectId, ref: 'User' },
   approvedBy: { type: Schema.Types.ObjectId, ref: 'User' },

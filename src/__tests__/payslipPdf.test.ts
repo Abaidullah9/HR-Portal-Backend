@@ -42,6 +42,7 @@ const payslip: PayslipDocument = {
   periodStart: '2026-05-01T00:00:00.000Z',
   periodEnd: '2026-05-31T00:00:00.000Z',
   paymentMethod: 'bank transfer',
+  currency: 'PKR',
   status: 'completed',
   datePaid: '2026-05-31T00:00:00.000Z',
   earnings: [
@@ -72,10 +73,12 @@ describe('payslip PDF', () => {
     expect(text).toContain('Base salary');
     expect(text).toContain('transport');
     expect(text).toContain('tax');
+    // An amount without its currency is ambiguous on a payslip.
+    expect(text).toContain('PKR 1,000.00');
     expect(text).toContain('1,000.00');
     expect(text).toContain('1,100.00');
     expect(text).toContain('234.56');
-    expect(text).toContain('865.44');
+    expect(text).toContain('PKR 865.44');
   });
 
   it('keeps the sections in reading order', async () => {

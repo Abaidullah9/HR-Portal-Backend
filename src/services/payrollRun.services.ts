@@ -4,6 +4,7 @@ import payrollModel from '../models/employeePayroll.model';
 import employeeModel from '../models/employee.model';
 import compensationServices from './compensation.services';
 import notificationServices from './notification.services';
+import organizationSettingServices from './organizationSetting.services';
 import { AppError } from '../utils/helper/AppError';
 import { StatusCode } from '../utils/helper/constants/enum';
 import { tenantFields, tenantFilter } from '../utils/context';
@@ -26,6 +27,10 @@ export interface GenerateRunInput {
  * totals, so a batch can be approved, paid or reversed as a unit. Overlapping
  * periods are refused unless the previous run was reversed, which is what
  * prevents paying somebody twice for November.
+ *
+ * A run has exactly one currency. Adding rupees to dollars produces a total
+ * that means nothing, so a member paid in another currency rejects the run
+ * before anything is written.
  */
 export const generateRun = async (input: GenerateRunInput, actorId?: string) => {
   if (!isDayKey(input.periodStart) || !isDayKey(input.periodEnd)) {
@@ -33,6 +38,13 @@ export const generateRun = async (input: GenerateRunInput, actorId?: string) => 
   }
   if (input.periodEnd < input.periodStart) {
     throw new AppError('The pay period end must be after its start', StatusCode.BAD_REQUEST);
+  }
+
+  const runCurrency = (input.currency?.trim().toUpperCase()
+    || (await organizationSettingServices.organizationCurrency()));
+
+  if (!/^[A-Z]{3}$/.test(runCurrency)) {
+    throw new AppError('The run currency must be a three-letter ISO code', StatusCode.BAD_REQUEST);
   }
 
   const overlapping = await payrollRunModel.findOne(
@@ -49,20 +61,8 @@ export const generateRun = async (input: GenerateRunInput, actorId?: string) => 
     );
   }
 
-  const run = await payrollRunModel.create({
-    ...tenantFields(),
-    periodStart: input.periodStart,
-    periodEnd: input.periodEnd,
-    status: 'draft',
-    employeeCount: 0,
-    totalNetPay: 0,
-    currency: input.currency ?? 'USD',
-    ...(input.notes ? { notes: input.notes } : {}),
-    ...(actorId ? { createdBy: actorId } : {}),
-  });
-
   const employees = await employeeModel.find(tenantFilter({ isActive: true }));
-  let created = 0;
+  const priced: { employeeId: mongoose.Types.ObjectId; salary: number }[] = [];
   let skipped = 0;
 
   for (const employee of employees) {
@@ -75,45 +75,65 @@ export const generateRun = async (input: GenerateRunInput, actorId?: string) => 
       continue;
     }
 
-    await payrollModel.create({
-      ...tenantFields(),
-      employeeId: employee._id,
-      payRunId: run._id,
-      baseSalary: roundMoney(salary),
-      currency: input.currency ?? (await compensationServices.currencyFor(employee._id.toString())),
-      allowances: [],
-      deductions: [],
-      bonuses: [],
-      netPay: roundMoney(salary),
-      payPeriodStart: startOfDay(input.periodStart),
-      payPeriodEnd: startOfDay(input.periodEnd),
-      paymentMethod: 'bank transfer',
-      status: 'pending',
-    });
-    created += 1;
+    const currency = await compensationServices.currencyFor(employee._id.toString());
+    if (currency !== runCurrency) {
+      throw new AppError(
+        `This run is in ${runCurrency}, but ${employee.name} (${employee.employeeCode ?? employee._id}) is paid in ${currency}. One run cannot mix currencies.`,
+        StatusCode.BAD_REQUEST,
+      );
+    }
+
+    priced.push({ employeeId: employee._id, salary });
   }
 
-  run.employeeCount = created;
-  run.totalNetPay = roundMoney(
-    (await payrollModel.find(tenantFilter({ payRunId: run._id }))).reduce(
-      (total, record) => total + (record.netPay ?? 0),
-      0,
-    ),
-  );
+  // Every rejection above happens before the run exists, so a refused run leaves
+  // no draft behind for somebody to reverse.
+  const run = await payrollRunModel.create({
+    ...tenantFields(),
+    periodStart: input.periodStart,
+    periodEnd: input.periodEnd,
+    status: 'draft',
+    employeeCount: 0,
+    totalNetPay: 0,
+    currency: runCurrency,
+    ...(input.notes ? { notes: input.notes } : {}),
+    ...(actorId ? { createdBy: actorId } : {}),
+  });
+
+  const records = priced.map(({ employeeId, salary }) => ({
+    ...tenantFields(),
+    employeeId,
+    payRunId: run._id,
+    baseSalary: roundMoney(salary),
+    currency: runCurrency,
+    allowances: [],
+    deductions: [],
+    bonuses: [],
+    netPay: roundMoney(salary),
+    payPeriodStart: startOfDay(input.periodStart),
+    payPeriodEnd: startOfDay(input.periodEnd),
+    paymentMethod: 'bank transfer' as const,
+    status: 'pending' as const,
+  }));
+
+  if (records.length > 0) await payrollModel.insertMany(records);
+
+  run.employeeCount = records.length;
+  run.totalNetPay = roundMoney(records.reduce((total, record) => total + record.netPay, 0));
   await run.save();
 
-  if (created > 0) {
+  if (records.length > 0) {
     notificationServices.notifySafely(
       notificationServices.notifyUsersWithAction('read_Payroll', {
-        title: `Payroll draft ready for ${created} employee${created === 1 ? '' : 's'}`,
-        detail: `${input.periodStart} → ${input.periodEnd}. Review and approve the run.`,
+        title: `Payroll draft ready for ${records.length} employee${records.length === 1 ? '' : 's'}`,
+        detail: `${input.periodStart} → ${input.periodEnd} · ${runCurrency}. Review and approve the run.`,
         href: '/payroll',
         kind: 'payroll',
       }),
     );
   }
 
-  return { run, created, skipped };
+  return { run, created: records.length, skipped };
 };
 
 export const listRuns = async (query: PaginationQuery & { status?: string }) => {

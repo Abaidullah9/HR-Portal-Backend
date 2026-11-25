@@ -329,7 +329,7 @@ const getUserById = async (_id: string) => {
 
   // The signed-in user needs the concrete action names, not just the role label:
   // the client gates its UI on them so a renamed or custom role still works.
-  const userById = await userModel.findById(_id).select('-password').populate({
+  const userById = await userModel.findOne(tenantFilter({ _id })).select('-password').populate({
     path: 'roleId',
     select: 'roleName actions',
     populate: { path: 'actions', select: 'actionName' },
@@ -361,7 +361,7 @@ const updateUser = async (_id: string, updateData: Partial<CreateUserDTO>) => {
     : updateData;
 
   const updatedUser = await userModel
-    .findByIdAndUpdate(_id, update, { returnDocument: 'after' })
+    .findOneAndUpdate(tenantFilter({ _id }), update, { returnDocument: 'after' })
     .select('-password')
     .populate('roleId', 'roleName');
   if (!updatedUser) throw new AppError(MESSAGES.USER_NOT_FOUND, StatusCode.NOT_FOUND);
@@ -372,7 +372,7 @@ const updateUser = async (_id: string, updateData: Partial<CreateUserDTO>) => {
 const deleteUser = async (_id: string) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  return userModel.findByIdAndDelete(_id).select('-password');
+  return userModel.findOneAndDelete(tenantFilter({ _id })).select('-password');
 };
 
 const updateUserStatus = async (_id: string, isActive: boolean) => {
@@ -382,8 +382,8 @@ const updateUserStatus = async (_id: string, isActive: boolean) => {
   // generation also kills the token itself, so reactivating the account does not
   // revive old cookies.
   const updatedUser = await userModel
-    .findByIdAndUpdate(
-      _id,
+    .findOneAndUpdate(tenantFilter({ _id }),
+      
       { $set: { isActive }, ...(isActive ? {} : { $inc: { tokenVersion: 1 } }) },
       { returnDocument: 'after' },
     )
@@ -398,7 +398,7 @@ const updateUserRole = async (_id: string, roleId: string) => {
   if (!_id || !roleId) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
   const updatedUser = await userModel
-    .findByIdAndUpdate(_id, { roleId }, { returnDocument: 'after' })
+    .findOneAndUpdate(tenantFilter({ _id }), { roleId }, { returnDocument: 'after' })
     .select('-password')
     .populate('roleId', 'roleName');
   if (!updatedUser) throw new AppError(MESSAGES.USER_NOT_FOUND, StatusCode.NOT_FOUND);

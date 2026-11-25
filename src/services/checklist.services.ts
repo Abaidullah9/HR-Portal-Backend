@@ -41,7 +41,7 @@ export const startChecklist = async (
   type: 'onboarding' | 'offboarding',
   anchorDate?: string,
 ) => {
-  const employee = await employeeModel.findById(employeeId);
+  const employee = await employeeModel.findOne(tenantFilter({ _id: employeeId }));
   if (!employee) throw new AppError('Employee not found', StatusCode.NOT_FOUND);
 
   const existing = await checklistTaskModel.countDocuments(tenantFilter({ employeeId, type }));

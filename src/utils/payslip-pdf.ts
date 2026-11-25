@@ -16,6 +16,8 @@ export interface PayslipDocument {
   periodStart: string | Date;
   periodEnd: string | Date;
   paymentMethod: string;
+  /** ISO code shown beside every amount; omitted only by older callers. */
+  currency?: string;
   status: string;
   datePaid?: string | Date | null;
   earnings: PayslipLine[];
@@ -28,8 +30,11 @@ export interface PayslipDocument {
 const PAGE_MARGIN = 50;
 const CONTENT_WIDTH = 595.28 - PAGE_MARGIN * 2;
 
-const money = (value: number): string =>
-  value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const money = (value: number, currency?: string): string =>
+  `${currency ? `${currency} ` : ''}${value.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 
 const day = (value: string | Date | null | undefined): string => {
   if (!value) return '--';
@@ -74,7 +79,7 @@ export const buildPayslipPdf = (payslip: PayslipDocument): Promise<Buffer> =>
         .text(label, PAGE_MARGIN, y, { width: CONTENT_WIDTH - 120, continued: false });
       doc
         .font(bold ? 'Helvetica-Bold' : 'Helvetica')
-        .text(money(amount), PAGE_MARGIN + CONTENT_WIDTH - 120, y, {
+        .text(money(amount, payslip.currency), PAGE_MARGIN + CONTENT_WIDTH - 120, y, {
           width: 120,
           align: 'right',
         });
@@ -124,7 +129,7 @@ export const buildPayslipPdf = (payslip: PayslipDocument): Promise<Buffer> =>
       .font('Helvetica-Bold')
       .fontSize(16)
       .fillColor('#111827')
-      .text(money(payslip.netPay), { align: 'right' });
+      .text(money(payslip.netPay, payslip.currency), { align: 'right' });
     doc.moveDown(1.2);
 
     doc

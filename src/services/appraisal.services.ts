@@ -36,7 +36,7 @@ const getAppraisalById = async (_id: string, scope?: ReadScope) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
   const appraisalById = await appraisalModel
-    .findById(_id)
+    .findOne(tenantFilter({ _id }))
     .populate('employeeId', 'name email')
     .populate('cycleId', 'name')
     .populate('appraiserId', 'name email');
@@ -75,14 +75,14 @@ const getAppraisalsByCycle = async (cycleId: string) => {
 const updateAppraisal = async (_id: string, updateData: Partial<CreateAppraisalDTO>) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const existing = await appraisalModel.findById(_id);
+  const existing = await appraisalModel.findOne(tenantFilter({ _id }));
   if (!existing) throw new AppError(MESSAGES.APPRAISAL_NOT_FOUND, StatusCode.NOT_FOUND);
   if (existing.lockedAt) {
     throw new AppError('This appraisal is locked and can no longer be edited', StatusCode.CONFLICT);
   }
 
   const updatedAppraisal = await appraisalModel
-    .findByIdAndUpdate(_id, updateData, { returnDocument: 'after' })
+    .findOneAndUpdate(tenantFilter({ _id }), updateData, { returnDocument: 'after' })
     .populate('employeeId', 'name email')
     .populate('cycleId', 'name')
     .populate('appraiserId', 'name email');
@@ -95,7 +95,7 @@ const updateAppraisalStatus = async (_id: string, status: string) => {
   if (!_id || !status) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
   const updatedAppraisal = await appraisalModel
-    .findByIdAndUpdate(_id, { status }, { returnDocument: 'after' })
+    .findOneAndUpdate(tenantFilter({ _id }), { status }, { returnDocument: 'after' })
     .populate('employeeId', 'name email')
     .populate('cycleId', 'name')
     .populate('appraiserId', 'name email');
@@ -107,7 +107,7 @@ const updateAppraisalStatus = async (_id: string, status: string) => {
 const deleteAppraisal = async (_id: string) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  return appraisalModel.findByIdAndDelete(_id);
+  return appraisalModel.findOneAndDelete(tenantFilter({ _id }));
 };
 
 /**
@@ -120,7 +120,7 @@ const submitSelfReview = async (
   input: { comment: string; rating?: number },
   scope: ReadScope,
 ) => {
-  const appraisal = await appraisalModel.findById(appraisalId);
+  const appraisal = await appraisalModel.findOne(tenantFilter({ _id: appraisalId }));
   if (!appraisal) throw new AppError(MESSAGES.APPRAISAL_NOT_FOUND, StatusCode.NOT_FOUND);
 
   const isOwner = scope.ownEmployeeId === appraisal.employeeId.toString();
@@ -145,7 +145,7 @@ const submitManagerReview = async (
   input: { comment: string; rating?: number },
   scope: ReadScope,
 ) => {
-  const appraisal = await appraisalModel.findById(appraisalId);
+  const appraisal = await appraisalModel.findOne(tenantFilter({ _id: appraisalId }));
   if (!appraisal) throw new AppError(MESSAGES.APPRAISAL_NOT_FOUND, StatusCode.NOT_FOUND);
 
   const isAppraiser = scope.ownEmployeeId === appraisal.appraiserId.toString();
@@ -171,7 +171,7 @@ const calibrate = async (
   scope: ReadScope,
   actorId?: string,
 ) => {
-  const appraisal = await appraisalModel.findById(appraisalId);
+  const appraisal = await appraisalModel.findOne(tenantFilter({ _id: appraisalId }));
   if (!appraisal) throw new AppError(MESSAGES.APPRAISAL_NOT_FOUND, StatusCode.NOT_FOUND);
   if (!scope.canReadAll) {
     throw new AppError('Only HR or an administrator can calibrate ratings', StatusCode.FORBIDDEN);
@@ -192,7 +192,7 @@ const calibrate = async (
 };
 
 const lock = async (appraisalId: string, scope: ReadScope) => {
-  const appraisal = await appraisalModel.findById(appraisalId);
+  const appraisal = await appraisalModel.findOne(tenantFilter({ _id: appraisalId }));
   if (!appraisal) throw new AppError(MESSAGES.APPRAISAL_NOT_FOUND, StatusCode.NOT_FOUND);
   if (!scope.canReadAll) {
     throw new AppError('Only HR or an administrator can lock an appraisal', StatusCode.FORBIDDEN);

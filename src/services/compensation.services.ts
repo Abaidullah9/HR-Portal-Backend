@@ -4,6 +4,7 @@ import { AppError } from '../utils/helper/AppError';
 import { StatusCode } from '../utils/helper/constants/enum';
 import { tenantFields, tenantFilter } from '../utils/context';
 import { isDayKey, todayKey } from '../utils/dates';
+import { organizationCurrency } from './organizationSetting.services';
 
 export interface CompensationInput {
   employeeId: string;
@@ -22,7 +23,7 @@ const roundMoney = (value: number) => Math.round(value * 100) / 100;
  * effective-dated row, so history survives the next raise.
  */
 export const recordCompensation = async (input: CompensationInput, actorId?: string) => {
-  const employee = await employeeModel.findById(input.employeeId);
+  const employee = await employeeModel.findOne(tenantFilter({ _id: input.employeeId }));
   if (!employee) throw new AppError('Employee not found', StatusCode.NOT_FOUND);
   if (!Number.isFinite(input.baseSalary) || input.baseSalary < 0) {
     throw new AppError('Salary must be a positive amount', StatusCode.BAD_REQUEST);
@@ -37,7 +38,9 @@ export const recordCompensation = async (input: CompensationInput, actorId?: str
     ...tenantFields(),
     employeeId: employee._id,
     baseSalary: roundMoney(input.baseSalary),
-    currency: input.currency ?? 'USD',
+    // The organisation has one payroll currency; a compensation row inherits it
+    // unless the caller states one explicitly.
+    currency: (input.currency ?? (await organizationCurrency())).toUpperCase(),
     effectiveFrom,
     reason: input.reason ?? 'adjustment',
     ...(input.note ? { note: input.note } : {}),
@@ -66,7 +69,7 @@ export const salaryEffectiveOn = async (employeeId: string, day: string): Promis
 
   if (record) return record.baseSalary;
 
-  const employee = await employeeModel.findById(employeeId).select('salary');
+  const employee = await employeeModel.findOne(tenantFilter({ _id: employeeId })).select('salary');
   return employee?.salary;
 };
 
@@ -74,7 +77,7 @@ export const currencyFor = async (employeeId: string): Promise<string> => {
   const record = await compensationModel
     .findOne(tenantFilter({ employeeId }))
     .sort({ effectiveFrom: -1 });
-  return record?.currency ?? 'USD';
+  return (record?.currency ?? (await organizationCurrency())).toUpperCase();
 };
 
 export default {

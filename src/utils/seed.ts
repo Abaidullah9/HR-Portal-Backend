@@ -31,7 +31,7 @@ import Goal from '../models/goal.model';
 import Notification from '../models/notification.model';
 import ChecklistTask from '../models/checklistTask.model';
 import ChecklistTemplate from '../models/checklistTemplate.model';
-import { dayKey } from './dates';
+import { dayKey, startOfDay } from './dates';
 
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/HR-DB';
 
@@ -70,12 +70,13 @@ async function seedDatabase() {
 
     console.log('🌱 Seeding Organization Settings...');
     await OrganizationSetting.create({
-      organizationName: 'TechCorp Solutions',
+      organizationName: 'TechCorp Pakistan',
       email: 'admin@techcorp.com',
-      phone: '+1-555-0198',
-      address: '123 Innovation Drive, Tech City, TC 90210',
+      phone: '+92-21-111-222-333',
+      address: '3rd Floor, Dolmen Towers, Clifton, Karachi 75600',
       workingDays: [1, 2, 3, 4, 5],
       lateAfter: '09:15',
+      currency: 'PKR',
       logoUrl: 'https://example.com/logo.png'
     });
 
@@ -297,7 +298,7 @@ async function seedDatabase() {
       departmentId: departments[0]!._id,
       position: 'Engineering Manager',
       employmentType: 'full-time',
-      salary: 9500,
+      salary: 190000,
       isActive: true,
       joiningDate: new Date('2022-01-15'),
     });
@@ -314,7 +315,7 @@ async function seedDatabase() {
       reportingManagerId: managerEmp._id,
       position: 'Senior Software Engineer',
       employmentType: 'full-time',
-      salary: 7916.67,
+      salary: 158000,
       isActive: true,
       joiningDate: new Date('2023-03-10'),
     });
@@ -344,7 +345,7 @@ async function seedDatabase() {
       jobPostingId: jobPosting._id,
       name: 'Evan Candidate',
       email: 'evan@example.com',
-      phone: '+1-555-0142',
+      phone: '+92-300-1234567',
       source: 'LinkedIn',
       appliedDate: new Date(),
       status: 'interview',
@@ -389,8 +390,8 @@ async function seedDatabase() {
       organizationId: orgId,
       employeeId: employeeEmp._id,
       date: today,
-      checkIn: new Date(today.getTime() + 9 * 60 * 60 * 1000),
-      checkOut: new Date(today.getTime() + 17 * 60 * 60 * 1000),
+      checkIn: new Date(startOfDay(dayKey(today)).getTime() + 9 * 60 * 60 * 1000),
+      checkOut: new Date(startOfDay(dayKey(today)).getTime() + 17 * 60 * 60 * 1000),
     });
 
     console.log('🌱 Seeding Payroll...');
@@ -403,11 +404,11 @@ async function seedDatabase() {
     const payroll = await EmployeePayroll.create({
       organizationId: orgId,
       employeeId: employeeEmp._id,
-      baseSalary: 7916.67,
-      allowances: [{ type: 'transport', amount: 200, taxable: false }],
-      deductions: [{ type: 'tax', amount: 1200, note: 'Monthly income tax' }],
+      baseSalary: 158000,
+      allowances: [{ type: 'transport', amount: 5000, taxable: false }],
+      deductions: [{ type: 'tax', amount: 12000, note: 'Monthly income tax' }],
       bonuses: [],
-      netPay: 6916.67,
+      netPay: 151000,
       payPeriodStart: currentMonthStart,
       payPeriodEnd: currentMonthEnd,
       paymentMethod: 'bank transfer',
@@ -485,7 +486,7 @@ async function seedDatabase() {
       departmentId: departments[1]!._id,
       position: 'HR Business Partner',
       employmentType: 'full-time',
-      salary: 8200,
+      salary: 164000,
       isActive: true,
       joiningDate: new Date('2021-06-01'),
     });
@@ -509,7 +510,7 @@ async function seedDatabase() {
       reportingManagerId: managerEmp._id,
       position: 'Frontend Engineer',
       employmentType: 'full-time',
-      salary: 6400,
+      salary: 128000,
       isActive: true,
       joiningDate: new Date('2024-02-05'),
     });
@@ -534,20 +535,20 @@ async function seedDatabase() {
       departmentId: departments[2]!._id,
       position: 'Account Executive',
       employmentType: 'full-time',
-      salary: 5600,
+      salary: 112000,
       isActive: true,
       joiningDate: new Date('2023-09-18'),
     });
 
     console.log('🌱 Seeding Compensation History...');
     const compensationRows = [
-      { employeeId: managerEmp._id, baseSalary: 9000, effectiveFrom: '2022-01-15', reason: 'initial' as const },
-      { employeeId: managerEmp._id, baseSalary: 9500, effectiveFrom: '2024-04-01', reason: 'raise' as const },
-      { employeeId: employeeEmp._id, baseSalary: 7400, effectiveFrom: '2023-03-10', reason: 'initial' as const },
-      { employeeId: employeeEmp._id, baseSalary: 7916.67, effectiveFrom: '2024-04-01', reason: 'raise' as const },
-      { employeeId: hrEmp._id, baseSalary: 8200, effectiveFrom: '2021-06-01', reason: 'initial' as const },
-      { employeeId: samEmp._id, baseSalary: 6400, effectiveFrom: '2024-02-05', reason: 'initial' as const },
-      { employeeId: priyaEmp._id, baseSalary: 5600, effectiveFrom: '2023-09-18', reason: 'initial' as const },
+      { employeeId: managerEmp._id, baseSalary: 180000, effectiveFrom: '2022-01-15', reason: 'initial' as const },
+      { employeeId: managerEmp._id, baseSalary: 190000, effectiveFrom: '2024-04-01', reason: 'raise' as const },
+      { employeeId: employeeEmp._id, baseSalary: 148000, effectiveFrom: '2023-03-10', reason: 'initial' as const },
+      { employeeId: employeeEmp._id, baseSalary: 158000, effectiveFrom: '2024-04-01', reason: 'raise' as const },
+      { employeeId: hrEmp._id, baseSalary: 164000, effectiveFrom: '2021-06-01', reason: 'initial' as const },
+      { employeeId: samEmp._id, baseSalary: 128000, effectiveFrom: '2024-02-05', reason: 'initial' as const },
+      { employeeId: priyaEmp._id, baseSalary: 112000, effectiveFrom: '2023-09-18', reason: 'initial' as const },
     ];
     await Compensation.insertMany(
       compensationRows.map((row) => ({ ...row, organizationId: orgId, currency: 'USD', createdBy: users[1]!._id })),
@@ -557,8 +558,8 @@ async function seedDatabase() {
     const thisYear = new Date().getFullYear();
     await Holiday.insertMany([
       { organizationId: orgId, name: "New Year's Day", date: `${thisYear}-01-01`, paid: true },
-      { organizationId: orgId, name: 'Founders Day', date: `${thisYear}-06-12`, paid: true },
-      { organizationId: orgId, name: 'Christmas Day', date: `${thisYear}-12-25`, paid: true },
+      { organizationId: orgId, name: 'Pakistan Day', date: `${thisYear}-03-23`, paid: true },
+      { organizationId: orgId, name: 'Independence Day', date: `${thisYear}-08-14`, paid: true },
     ]);
 
     console.log('🌱 Seeding Leave Balances...');
@@ -634,8 +635,8 @@ async function seedDatabase() {
           employeeId: employee._id,
           date,
           dateKey: dayKey(date),
-          checkIn: new Date(date.getTime() + 9 * 60 * 60 * 1000),
-          checkOut: new Date(date.getTime() + 17 * 60 * 60 * 1000),
+          checkIn: new Date(startOfDay(dayKey(date)).getTime() + 9 * 60 * 60 * 1000),
+          checkOut: new Date(startOfDay(dayKey(date)).getTime() + 17 * 60 * 60 * 1000),
         });
       }
     }
@@ -650,7 +651,7 @@ async function seedDatabase() {
       periodEnd,
       status: 'draft',
       employeeCount: 5,
-      totalNetPay: 9500 + 7916.67 + 8200 + 6400 + 5600,
+      totalNetPay: 190000 + 158000 + 164000 + 128000 + 112000,
       currency: 'USD',
       createdBy: users[1]!._id,
       notes: 'Seed data: a draft run for approving, paying and reversing.',
@@ -658,11 +659,11 @@ async function seedDatabase() {
 
     await EmployeePayroll.insertMany(
       [
-        { employeeId: managerEmp._id, baseSalary: 9500 },
-        { employeeId: employeeEmp._id, baseSalary: 7916.67 },
-        { employeeId: hrEmp._id, baseSalary: 8200 },
-        { employeeId: samEmp._id, baseSalary: 6400 },
-        { employeeId: priyaEmp._id, baseSalary: 5600 },
+        { employeeId: managerEmp._id, baseSalary: 190000 },
+        { employeeId: employeeEmp._id, baseSalary: 158000 },
+        { employeeId: hrEmp._id, baseSalary: 164000 },
+        { employeeId: samEmp._id, baseSalary: 128000 },
+        { employeeId: priyaEmp._id, baseSalary: 112000 },
       ].map((row) => ({
         organizationId: orgId,
         employeeId: row.employeeId,

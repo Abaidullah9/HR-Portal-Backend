@@ -98,9 +98,9 @@ const addLeaveRequest = async (requestData: CreateLeaveRequestDTO, scope?: ReadS
 
   // The requester's manager is the first approver; only when there is none does
   // the request go to everyone holding the approval action.
-  const employee = await employeeModel.findById(newRequest.employeeId).select('name reportingManagerId');
+  const employee = await employeeModel.findOne(tenantFilter({ _id: newRequest.employeeId })).select('name reportingManagerId');
   const manager = employee?.reportingManagerId
-    ? await employeeModel.findById(employee.reportingManagerId).select('userId name')
+    ? await employeeModel.findOne(tenantFilter({ _id: employee.reportingManagerId })).select('userId name')
     : null;
 
   const title = `${employee?.name ?? 'An employee'} requested ${newRequest.leaveType} leave`;
@@ -148,7 +148,7 @@ const getAllLeaveRequest = async (query: PaginationQuery & { status?: string }, 
 const getLeaveRequestById = async (_id: string, scope: ReadScope) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const requestById = await leaveRequestModel.findById(_id);
+  const requestById = await leaveRequestModel.findOne(tenantFilter({ _id }));
   if (!requestById) throw new AppError(MESSAGES.LEAVE_REQUEST_NOT_FOUND, StatusCode.NOT_FOUND);
   if (!canAccessEmployee(scope, requestById.employeeId.toString())) {
     throw new AppError(MESSAGES.NOT_AUTHORIZED, StatusCode.FORBIDDEN);
@@ -207,7 +207,7 @@ const updateLeaveRequest = async (
 ) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const existingRequest = await leaveRequestModel.findById(_id);
+  const existingRequest = await leaveRequestModel.findOne(tenantFilter({ _id }));
   if (!existingRequest) throw new AppError(MESSAGES.LEAVE_REQUEST_NOT_FOUND, StatusCode.NOT_FOUND);
   if (!canAccessEmployee(scope, existingRequest.employeeId.toString())) {
     throw new AppError(MESSAGES.NOT_AUTHORIZED, StatusCode.FORBIDDEN);
@@ -231,8 +231,8 @@ const updateLeaveRequest = async (
   if (days === 0) throw new AppError('That range contains no working days', StatusCode.BAD_REQUEST);
 
   const updatedRequest = await leaveRequestModel
-    .findByIdAndUpdate(
-      _id,
+    .findOneAndUpdate(tenantFilter({ _id }),
+      
       { ...updateData, workingDays: days },
       { returnDocument: 'after' },
     )
@@ -248,7 +248,7 @@ const approveRejectLeave = async (
 ) => {
   if (!requestId || !approvalData) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const request = await leaveRequestModel.findById(requestId);
+  const request = await leaveRequestModel.findOne(tenantFilter({ _id: requestId }));
   if (!request) throw new AppError(MESSAGES.LEAVE_REQUEST_NOT_FOUND, StatusCode.NOT_FOUND);
   if (request.leaveStatus !== 'pending') throw new AppError(MESSAGES.CANNOT_UPDATE_NON_PENDING, StatusCode.BAD_REQUEST);
 
@@ -306,7 +306,7 @@ const approveRejectLeave = async (
     session.endSession();
   }
 
-  const employee = await employeeModel.findById(request.employeeId).select('userId name');
+  const employee = await employeeModel.findOne(tenantFilter({ _id: request.employeeId })).select('userId name');
   if (employee?.userId) {
     notificationServices.notifySafely(
       notificationServices.notifyUsers([employee.userId], {
@@ -324,7 +324,7 @@ const approveRejectLeave = async (
 const cancelLeaveRequest = async (_id: string, scope: ReadScope) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const request = await leaveRequestModel.findById(_id);
+  const request = await leaveRequestModel.findOne(tenantFilter({ _id }));
   if (!request) throw new AppError(MESSAGES.LEAVE_REQUEST_NOT_FOUND, StatusCode.NOT_FOUND);
 
   const isOwner = scope.ownEmployeeId === request.employeeId.toString();
@@ -358,13 +358,13 @@ const cancelLeaveRequest = async (_id: string, scope: ReadScope) => {
 const deleteLeaveRequest = async (_id: string, scope: ReadScope) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const existingRequest = await leaveRequestModel.findById(_id);
+  const existingRequest = await leaveRequestModel.findOne(tenantFilter({ _id }));
   if (!existingRequest) throw new AppError(MESSAGES.LEAVE_REQUEST_NOT_FOUND, StatusCode.NOT_FOUND);
   if (!canAccessEmployee(scope, existingRequest.employeeId.toString())) {
     throw new AppError(MESSAGES.NOT_AUTHORIZED, StatusCode.FORBIDDEN);
   }
 
-  return leaveRequestModel.findByIdAndDelete(_id);
+  return leaveRequestModel.findOneAndDelete(tenantFilter({ _id }));
 };
 
 /** The team's approved absence in a window, for the leave calendar. */

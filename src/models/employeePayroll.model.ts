@@ -22,7 +22,7 @@ const payrollSchema = new Schema<IEmployeePayroll>({
   organizationId: { type: Schema.Types.ObjectId, ref: 'Organization', index: true },
   employeeId: { type: Schema.Types.ObjectId, ref: 'Employee', required: true, index: true },
   payRunId: { type: Schema.Types.ObjectId, ref: 'PayrollRun', index: true },
-  currency: { type: String, uppercase: true, trim: true, default: 'USD' },
+  currency: { type: String, uppercase: true, trim: true, default: 'PKR' },
   baseSalary: { type: Number, required: true },
   allowances: [{
     type: { type: String, required: true },

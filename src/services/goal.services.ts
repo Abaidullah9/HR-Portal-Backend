@@ -82,7 +82,7 @@ export const deleteGoal = async (goalId: string) => {
  */
 export const snapshotGoalsIntoAppraisal = async (appraisalId: string, employeeId: string, cycleId: string) => {
   const [appraisal, goals] = await Promise.all([
-    appraisalModel.findById(appraisalId),
+    appraisalModel.findOne(tenantFilter({ _id: appraisalId })),
     goalModel.find(tenantFilter({ employeeId, cycleId })),
   ]);
   if (!appraisal) throw new AppError('Appraisal not found', StatusCode.NOT_FOUND);

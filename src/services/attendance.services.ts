@@ -59,7 +59,7 @@ const getAllAttendance = async (
 const getAttendanceById = async (_id: string, scope: ReadScope) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const attendanceById = await attendanceModel.findById(_id);
+  const attendanceById = await attendanceModel.findOne(tenantFilter({ _id }));
   if (!attendanceById) throw new AppError(MESSAGES.ATTENDANCE_NOT_FOUND, StatusCode.NOT_FOUND);
   if (!canAccessEmployee(scope, attendanceById.employeeId.toString())) {
     throw new AppError(MESSAGES.NOT_AUTHORIZED, StatusCode.FORBIDDEN);
@@ -118,7 +118,7 @@ const updateAttendance = async (
 ) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const existing = await attendanceModel.findById(_id);
+  const existing = await attendanceModel.findOne(tenantFilter({ _id }));
   if (!existing) throw new AppError(MESSAGES.ATTENDANCE_NOT_FOUND, StatusCode.NOT_FOUND);
   if (!canAccessEmployee(scope, existing.employeeId.toString())) {
     throw new AppError(MESSAGES.NOT_AUTHORIZED, StatusCode.FORBIDDEN);
@@ -141,8 +141,8 @@ const updateAttendance = async (
   }
 
   const updatedAttendance = await attendanceModel
-    .findByIdAndUpdate(
-      _id,
+    .findOneAndUpdate(tenantFilter({ _id }),
+      
       overwritesRecordedTime ? { ...fields, regularized: true, regularizationNote: note } : fields,
       { returnDocument: 'after' },
     )
@@ -155,13 +155,13 @@ const updateAttendance = async (
 const deleteAttendance = async (_id: string, scope: ReadScope) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const existing = await attendanceModel.findById(_id);
+  const existing = await attendanceModel.findOne(tenantFilter({ _id }));
   if (!existing) throw new AppError(MESSAGES.ATTENDANCE_NOT_FOUND, StatusCode.NOT_FOUND);
   if (!canAccessEmployee(scope, existing.employeeId.toString())) {
     throw new AppError(MESSAGES.NOT_AUTHORIZED, StatusCode.FORBIDDEN);
   }
 
-  return attendanceModel.findByIdAndDelete(_id);
+  return attendanceModel.findOneAndDelete(tenantFilter({ _id }));
 };
 
 export default {

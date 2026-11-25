@@ -16,7 +16,7 @@ const compensationSchema = new Schema<ICompensation>({
   organizationId: { type: Schema.Types.ObjectId, ref: 'Organization', index: true },
   employeeId: { type: Schema.Types.ObjectId, ref: 'Employee', required: true, index: true },
   baseSalary: { type: Number, required: true, min: 0 },
-  currency: { type: String, required: true, default: 'USD', trim: true, uppercase: true },
+  currency: { type: String, required: true, default: 'PKR', trim: true, uppercase: true },
   effectiveFrom: { type: String, required: true, match: /^\d{4}-\d{2}-\d{2}$/, index: true },
   reason: {
     type: String,

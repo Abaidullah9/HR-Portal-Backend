@@ -8,6 +8,8 @@ export interface IOrganizationSetting extends Document {
   workingDays: number[];
   /** Local time after which a check-in counts as late, e.g. "09:15". */
   lateAfter?: string;
+  /** ISO code payroll and payslips are denominated in. */
+  currency?: string;
   logoUrl?: string;
 }
 const organizationSettingSchema = new Schema<IOrganizationSetting>({
@@ -17,6 +19,7 @@ const organizationSettingSchema = new Schema<IOrganizationSetting>({
   address: { type: String, trim: true },
   workingDays: { type: [Number], enum: [0, 1, 2, 3, 4, 5, 6], default: [1, 2, 3, 4, 5] }, // 0=Sun, 1=Mon...
   lateAfter: { type: String, default: '09:15', match: /^([01]\d|2[0-3]):[0-5]\d$/ },
+  currency: { type: String, default: 'PKR', uppercase: true, trim: true, match: /^[A-Z]{3}$/ },
   logoUrl: { type: String }
 }, { timestamps: true });
 export default mongoose.model<IOrganizationSetting>('Organization', organizationSettingSchema);

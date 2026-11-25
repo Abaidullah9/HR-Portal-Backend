@@ -1,3 +1,4 @@
+import { tenantFilter } from '../utils/context';
 import { StatusCode } from "../utils/helper/constants/enum";
 import { AppError } from "../utils/helper/AppError";
 import candidateModel from "../models/candidate.model";
@@ -22,7 +23,7 @@ const getAllCandidate = async (query: PaginationQuery) => {
 const getCandidateById = async (_id: string) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const candidateById = await candidateModel.findById(_id).populate("jobPostingId", "position");
+  const candidateById = await candidateModel.findOne(tenantFilter({ _id })).populate("jobPostingId", "position");
   if (!candidateById) throw new AppError(MESSAGES.CANDIDATE_NOT_FOUND, StatusCode.NOT_FOUND);
   return candidateById;
 };
@@ -47,7 +48,7 @@ const getCandidatesByStatus = async (status: string) => {
 const updateCandidate = async (_id: string, updateData: Partial<CreateCandidateDTO>) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const updatedCandidate = await candidateModel.findByIdAndUpdate(_id, updateData, { returnDocument: 'after' });
+  const updatedCandidate = await candidateModel.findOneAndUpdate(tenantFilter({ _id }), updateData, { returnDocument: 'after' });
   if (!updatedCandidate) throw new AppError(MESSAGES.CANDIDATE_NOT_FOUND, StatusCode.NOT_FOUND);
 
   return updatedCandidate;
@@ -57,7 +58,7 @@ const updateCandidateStatus = async (_id: string, status: string) => {
   if (!_id || !status) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
   const updateFilter: Record<string, unknown> = { status };
-  const updatedCandidate = await candidateModel.findByIdAndUpdate(_id, updateFilter, { returnDocument: 'after' });
+  const updatedCandidate = await candidateModel.findOneAndUpdate(tenantFilter({ _id }), updateFilter, { returnDocument: 'after' });
   if (!updatedCandidate) throw new AppError(MESSAGES.CANDIDATE_NOT_FOUND, StatusCode.NOT_FOUND);
 
   return updatedCandidate;
@@ -66,7 +67,7 @@ const updateCandidateStatus = async (_id: string, status: string) => {
 const deleteCandidate = async (_id: string) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const deletedCandidate = await candidateModel.findByIdAndDelete(_id);
+  const deletedCandidate = await candidateModel.findOneAndDelete(tenantFilter({ _id }));
 
   return deletedCandidate;
 };

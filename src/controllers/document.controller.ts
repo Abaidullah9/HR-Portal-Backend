@@ -10,6 +10,7 @@ import { CreateDocumentDTO, UpdateDocumentDTO } from '../utils/dtos/document.dto
 import { PaginationQuery } from '../utils/common';
 import { resolveReadScope } from '../utils/helper/ownership';
 import { removeStoredFile, resolveStoredFile, saveBuffer, signedDownloadUrl } from '../utils/storage';
+import { recordAudit } from '../utils/helper/audit';
 
 const addDocument = async (req: Request, res: Response) => {
   let storedKey: string | null = null;
@@ -78,6 +79,15 @@ const downloadDocument = async (req: Request, res: Response) => {
     const { _id } = req.params;
     const scope = await resolveReadScope(req.userId!);
     const document = await documentServices.getDocumentForDownload(_id as string, scope);
+
+    // Downloads are reads, so the central mutation audit never sees them. Who
+    // took a copy of somebody's document is exactly what an HR audit needs.
+    await recordAudit(req.userId, {
+      action: 'document.download',
+      entity: 'Document',
+      entityId: _id as string,
+      detail: document.name,
+    }, res);
 
     const key = document.storageKey || path.basename(document.fileUrl || '');
     if (!key) {

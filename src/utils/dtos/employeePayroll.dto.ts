@@ -22,7 +22,13 @@ export interface CreatePayrollDTO {
   allowances?: AllowanceDTO[];
   deductions?: DeductionDTO[];
   bonuses?: BonusDTO[];
-  netPay: number;
+  /** Rejected by the service: net pay is computed from the lines. */
+  netPay?: number;
+  /**
+   * Required when the caller supplies statutory deduction lines themselves
+   * (Income tax, EOBI, Provident fund). The reason is kept in the audit trail.
+   */
+  overrideReason?: string;
   payPeriodStart: Date;
   payPeriodEnd: Date;
   datePaid?: Date;
@@ -35,7 +41,10 @@ export interface UpdatePayrollDTO {
   allowances?: AllowanceDTO[];
   deductions?: DeductionDTO[];
   bonuses?: BonusDTO[];
+  /** Rejected by the service: net pay is computed from the lines. */
   netPay?: number;
+  /** Required when overriding the statutory deduction lines. */
+  overrideReason?: string;
   payPeriodStart?: Date;
   payPeriodEnd?: Date;
   datePaid?: Date;

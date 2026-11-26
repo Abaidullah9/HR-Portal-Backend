@@ -6,15 +6,61 @@ import { StatusCode } from "../utils/helper/constants/enum";
 import { AppError } from "../utils/helper/AppError";
 import { CreatePayrollDTO, UpdatePayrollDTO } from "../utils/dtos/employeePayroll.dto";
 import { PaginationQuery } from "../utils/common";
-import { recordAudit } from "../utils/helper/audit";
+import { diffFields, recordAudit } from "../utils/helper/audit";
 import { resolveReadScope } from "../utils/helper/ownership";
 import { buildPayslipPdf } from "../utils/payslip-pdf";
+
+const AUDIT_FIELDS = [
+  "employeeId",
+  "baseSalary",
+  "allowances",
+  "deductions",
+  "bonuses",
+  "netPay",
+  "payPeriodStart",
+  "payPeriodEnd",
+  "paymentMethod",
+  "status",
+  "payslipNumber",
+  "payRunId",
+];
+
+const idOf = (value: unknown): string | undefined => {
+  if (!value) return undefined;
+  if (typeof value === "object" && "_id" in (value as Record<string, unknown>)) {
+    return (value as { _id?: { toString?: () => string } })._id?.toString?.();
+  }
+  return (value as { toString?: () => string }).toString?.();
+};
+
+/** The payroll fields worth showing a reviewer, with references flattened. */
+const payrollSnapshot = (record: any): Record<string, unknown> => ({
+  employeeId: idOf(record.employeeId),
+  baseSalary: record.baseSalary,
+  allowances: record.allowances ?? [],
+  deductions: record.deductions ?? [],
+  bonuses: record.bonuses ?? [],
+  netPay: record.netPay,
+  payPeriodStart: record.payPeriodStart,
+  payPeriodEnd: record.payPeriodEnd,
+  paymentMethod: record.paymentMethod,
+  status: record.status,
+  payslipNumber: record.payslipNumber,
+  payRunId: idOf(record.payRunId),
+});
 
 const addPayroll = async (req: Request, res: Response) => {
   try {
     const body: CreatePayrollDTO = req.body;
     const newPayroll = await employeePayrollServices.addPayroll(body);
     if (!newPayroll) throw new AppError(MESSAGES.FAILED_TO_CREATE_PAYROLL, StatusCode.INTERNAL_SERVER_ERROR);
+    await recordAudit(req.userId, {
+      action: "payroll.create",
+      entity: "EmployeePayroll",
+      entityId: newPayroll._id.toString(),
+      ...(body.overrideReason ? { detail: `statutory override: ${body.overrideReason}` } : {}),
+      changes: diffFields({}, payrollSnapshot(newPayroll), AUDIT_FIELDS),
+    }, res);
     res.status(StatusCode.CREATED).json({ success: true, message: MESSAGES.PAYROLL_ADDED_SUCCESSFULLY, data: newPayroll });
   } catch (error) {
     sendErrorResponse(res, error);
@@ -92,7 +138,15 @@ const updatePayroll = async (req: Request, res: Response) => {
   try {
     const { _id } = req.params;
     const updateData: UpdatePayrollDTO = req.body;
+    const before = await employeePayrollServices.getPayrollById(_id as string);
     const result = await employeePayrollServices.updatePayroll(_id as string, updateData);
+    await recordAudit(req.userId, {
+      action: "payroll.update",
+      entity: "EmployeePayroll",
+      entityId: _id as string,
+      ...(updateData.overrideReason ? { detail: `statutory override: ${updateData.overrideReason}` } : {}),
+      changes: diffFields(payrollSnapshot(before), payrollSnapshot(result), AUDIT_FIELDS),
+    }, res);
     res.status(StatusCode.OK).json({ success: true, message: MESSAGES.PAYROLL_UPDATED_SUCCESSFULLY, data: result });
   } catch (error) {
     sendErrorResponse(res, error);
@@ -103,11 +157,13 @@ const updatePayrollStatus = async (req: Request, res: Response) => {
   try {
     const { _id } = req.params;
     const { status }: { status: string } = req.body;
-    const result = await employeePayrollServices.updatePayrollStatus(_id as string, status as 'completed' | 'failed' | 'pending');
+    const before = await employeePayrollServices.getPayrollById(_id as string);
+    const result = await employeePayrollServices.updatePayrollStatus(_id as string, status as 'completed' | 'failed');
     await recordAudit(req.userId, {
       action: `payroll.${status}`,
       entity: 'EmployeePayroll',
       entityId: _id as string,
+      changes: diffFields(payrollSnapshot(before), payrollSnapshot(result), AUDIT_FIELDS),
     }, res);
     res.status(StatusCode.OK).json({ success: true, message: MESSAGES.PAYROLL_UPDATED_SUCCESSFULLY, data: result });
   } catch (error) {
@@ -118,8 +174,15 @@ const updatePayrollStatus = async (req: Request, res: Response) => {
 const deletePayroll = async (req: Request, res: Response) => {
   try {
     const { _id } = req.params;
+    const before = await employeePayrollServices.getPayrollById(_id as string);
     const deletedPayroll = await employeePayrollServices.deletePayroll(_id as string);
     if (!deletedPayroll) throw new AppError(MESSAGES.PAYROLL_NOT_FOUND, StatusCode.NOT_FOUND);
+    await recordAudit(req.userId, {
+      action: "payroll.delete",
+      entity: "EmployeePayroll",
+      entityId: _id as string,
+      changes: diffFields(payrollSnapshot(before), {}, AUDIT_FIELDS),
+    }, res);
     res.status(StatusCode.OK).json({ success: true, message: MESSAGES.PAYROLL_DELETED_SUCCESSFULLY, data: deletedPayroll });
   } catch (error) {
     sendErrorResponse(res, error);
@@ -141,6 +204,12 @@ const downloadPayslip = async (req: Request, res: Response) => {
   try {
     const scope = await resolveReadScope(req.userId!);
     const payslip = await employeePayrollServices.getPayslip(req.params._id as string, scope);
+    await recordAudit(req.userId, {
+      action: 'payroll.payslip.download',
+      entity: 'EmployeePayroll',
+      entityId: req.params._id as string,
+      ...(payslip.payslipNumber ? { detail: payslip.payslipNumber } : {}),
+    }, res);
     const pdf = await buildPayslipPdf(payslip);
 
     const slug = payslip.employee.name

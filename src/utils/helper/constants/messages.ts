@@ -62,6 +62,16 @@ export const MESSAGES = {
   PAYROLL_UPDATED_SUCCESSFULLY: "Payroll record updated successfully",
   PAYROLL_DELETED_SUCCESSFULLY: "Payroll record deleted successfully",
   PAYROLL_NOT_FOUND: "Payroll record not found",
+  PAYROLL_NET_PAY_CALCULATED: "Net pay is calculated from the record's earnings and deductions; remove netPay from the request.",
+  PAYROLL_OVERRIDE_REASON_REQUIRED: "Provide an overrideReason when supplying your own statutory deductions.",
+  PAYROLL_RUN_OWNED_READ_ONLY: "This record belongs to a payroll run. Pay, reverse or regenerate the run instead of editing the record.",
+  PAYROLL_COMPLETED_READ_ONLY: "A completed payroll record is immutable.",
+  PAYROLL_STATUS_ENDPOINT_ONLY: "Change payment status through the status endpoint.",
+  PAYROLL_CREATE_AS_PENDING: "Create the record as pending, then mark it paid.",
+  PAYROLL_INVALID_AMOUNT: "Amounts must be zero or more.",
+  PAYROLL_INVALID_PERIOD: "The pay period end must not be before its start.",
+  PAYROLL_INVALID_STATUS: "Payment status must be pending, completed or failed.",
+  PAYROLL_NOT_PENDING: "Only an unpaid payroll record can change payment status.",
 
   // Feedback messages
   FEEDBACK_ADDED_SUCCESSFULLY: "Feedback added successfully",

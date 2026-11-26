@@ -9,6 +9,7 @@ import { PaginationQuery } from "../utils/common";
 import { currentContext } from "../utils/context";
 import { generateToken } from "../utils/helper/helper.functions";
 import { sessionCookieOptions } from "../utils/cookies";
+import { diffFields, recordAudit } from "../utils/helper/audit";
 
 const setTokenCookie = (res: Response, token: string) => {
   res.cookie("accessToken", token, sessionCookieOptions());
@@ -69,6 +70,12 @@ const verifyMfa = async (req: Request, res: Response) => {
 const setupMfa = async (req: Request, res: Response) => {
   try {
     const data = await userServices.setupMfa(req.userId!);
+    // The secret itself is never written to the audit trail.
+    await recordAudit(req.userId, {
+      action: 'user.mfa.setup',
+      entity: 'User',
+      entityId: req.userId!,
+    }, res);
     res.status(StatusCode.OK).json({ success: true, message: 'Scan the secret with your authenticator app', data });
   } catch (error) {
     sendErrorResponse(res, error);
@@ -79,6 +86,12 @@ const enableMfa = async (req: Request, res: Response) => {
   try {
     const { code } = req.body as { code?: string };
     const data = await userServices.enableMfa(req.userId!, code ?? '');
+    await recordAudit(req.userId, {
+      action: 'user.mfa.enable',
+      entity: 'User',
+      entityId: req.userId!,
+      changes: [{ field: 'mfaEnabled', from: false, to: true }],
+    }, res);
     res.status(StatusCode.OK).json({ success: true, message: 'Two-factor authentication is on', data });
   } catch (error) {
     sendErrorResponse(res, error);
@@ -89,6 +102,12 @@ const disableMfa = async (req: Request, res: Response) => {
   try {
     const { password } = req.body as { password?: string };
     const data = await userServices.disableMfa(req.userId!, password ?? '');
+    await recordAudit(req.userId, {
+      action: 'user.mfa.disable',
+      entity: 'User',
+      entityId: req.userId!,
+      changes: [{ field: 'mfaEnabled', from: true, to: false }],
+    }, res);
     res.status(StatusCode.OK).json({ success: true, message: 'Two-factor authentication is off', data });
   } catch (error) {
     sendErrorResponse(res, error);
@@ -152,7 +171,14 @@ const updateStatus = async (req: Request, res: Response) => {
   try {
     const { _id } = req.params;
     const { isActive }: { isActive: boolean } = req.body;
+    const before = await userServices.getUserById(_id as string);
     const result = await userServices.updateUserStatus(_id as string, isActive);
+    await recordAudit(req.userId, {
+      action: 'user.status.update',
+      entity: 'User',
+      entityId: _id as string,
+      changes: diffFields({ isActive: before?.isActive }, { isActive: result?.isActive }),
+    }, res);
     res.status(StatusCode.OK).json({ success: true, message: MESSAGES.USER_STATUS_UPDATED_SUCCESSFULLY, data: result });
   } catch (error) {
     sendErrorResponse(res, error);
@@ -163,7 +189,18 @@ const updateRole = async (req: Request, res: Response) => {
   try {
     const { _id } = req.params;
     const { roleId }: { roleId: string } = req.body;
+    const before = await userServices.getUserById(_id as string);
     const result = await userServices.updateUserRole(_id as string, roleId);
+    await recordAudit(req.userId, {
+      action: 'user.role.update',
+      entity: 'User',
+      entityId: _id as string,
+      // roleId comes back populated, so compare the underlying id.
+      changes: diffFields(
+        { roleId: (before?.roleId?._id ?? before?.roleId)?.toString() },
+        { roleId: (result?.roleId?._id ?? result?.roleId)?.toString() },
+      ),
+    }, res);
     res.status(StatusCode.OK).json({ success: true, message: MESSAGES.USER_ROLE_UPDATED_SUCCESSFULLY, data: result });
   } catch (error) {
     sendErrorResponse(res, error);
@@ -207,6 +244,11 @@ const changePassword = async (req: Request, res: Response) => {
       newPassword?: string;
     };
     const data = await userServices.changePassword(req.userId!, currentPassword ?? '', newPassword ?? '');
+    await recordAudit(req.userId, {
+      action: 'user.password.change',
+      entity: 'User',
+      entityId: req.userId!,
+    }, res);
     res.status(StatusCode.OK).json({ success: true, message: 'Password updated', data });
   } catch (error) {
     sendErrorResponse(res, error);

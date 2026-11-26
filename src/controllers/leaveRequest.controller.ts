@@ -7,7 +7,7 @@ import { AppError } from "../utils/helper/AppError";
 import { CreateLeaveRequestDTO, UpdateLeaveRequestDTO, ApproveRejectLeaveDTO } from "../utils/dtos/leaveRequest.dto";
 import { PaginationQuery } from "../utils/common";
 import { resolveReadScope } from "../utils/helper/ownership";
-import { recordAudit } from "../utils/helper/audit";
+import { diffFields, recordAudit } from "../utils/helper/audit";
 
 const addLeaveRequest = async (req: Request, res: Response) => {
   try {
@@ -110,12 +110,29 @@ const approveRejectLeave = async (req: Request, res: Response) => {
     // approvedById always comes from the authenticated user, never the client body
     const approvalData: ApproveRejectLeaveDTO = { ...req.body, approvedById: req.userId! };
     const scope = await resolveReadScope(req.userId!);
+    const before = await leaveRequestServices.getLeaveRequestById(_id as string, scope);
     const result = await leaveRequestServices.approveRejectLeave(_id as string, approvalData, scope);
+    const fields = ['leaveStatus', 'approvedById', 'rejectionReason', 'workingDays'];
     await recordAudit(req.userId, {
       action: `leave.${approvalData.leaveStatus}`,
       entity: 'LeaveRequest',
       entityId: _id as string,
-      detail: approvalData.rejectionReason ? `reason: ${approvalData.rejectionReason}` : undefined,
+      ...(approvalData.rejectionReason ? { detail: `reason: ${approvalData.rejectionReason}` } : {}),
+      changes: diffFields(
+        {
+          leaveStatus: before?.leaveStatus,
+          approvedById: before?.approvedById?.toString(),
+          rejectionReason: before?.rejectionReason,
+          workingDays: before?.workingDays,
+        },
+        {
+          leaveStatus: result?.leaveStatus,
+          approvedById: result?.approvedById?.toString(),
+          rejectionReason: result?.rejectionReason,
+          workingDays: result?.workingDays,
+        },
+        fields,
+      ),
     }, res);
     res.status(StatusCode.OK).json({ success: true, message: MESSAGES.LEAVE_REQUEST_UPDATED_SUCCESSFULLY, data: result });
   } catch (error) {

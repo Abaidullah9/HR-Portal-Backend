@@ -3,6 +3,27 @@ import { sendErrorResponse } from '../utils/helper/sendError';
 import payrollRunServices from '../services/payrollRun.services';
 import { StatusCode } from '../utils/helper/constants/enum';
 import { PaginationQuery } from '../utils/common';
+import { diffFields, recordAudit } from '../utils/helper/audit';
+
+const RUN_FIELDS = [
+  'periodStart',
+  'periodEnd',
+  'status',
+  'employeeCount',
+  'totalNetPay',
+  'currency',
+  'reversalReason',
+];
+
+const runSnapshot = (run: any): Record<string, unknown> => ({
+  periodStart: run?.periodStart,
+  periodEnd: run?.periodEnd,
+  status: run?.status,
+  employeeCount: run?.employeeCount,
+  totalNetPay: run?.totalNetPay,
+  currency: run?.currency,
+  reversalReason: run?.reversalReason,
+});
 
 const listRuns = async (req: Request, res: Response) => {
   try {
@@ -23,6 +44,15 @@ const generateRun = async (req: Request, res: Response) => {
       { ...req.body, ...(idempotencyKey ? { idempotencyKey } : {}) },
       req.userId,
     );
+    if (!data.replayed) {
+      await recordAudit(req.userId, {
+        action: 'payrollRun.generate',
+        entity: 'PayrollRun',
+        entityId: data.run._id.toString(),
+        ...(data.skipped > 0 ? { detail: `${data.skipped} employee(s) skipped` } : {}),
+        changes: diffFields({}, runSnapshot(data.run), RUN_FIELDS),
+      }, res);
+    }
     res.status(data.replayed ? StatusCode.OK : StatusCode.CREATED).json({
       success: true,
       message: data.replayed ? 'Payroll run already exists for that request' : 'Payroll draft created',
@@ -44,7 +74,15 @@ const getRun = async (req: Request, res: Response) => {
 
 const approveRun = async (req: Request, res: Response) => {
   try {
-    const data = await payrollRunServices.approveRun(req.params._id as string, req.userId);
+    const id = req.params._id as string;
+    const before = await payrollRunServices.getRunStatus(id);
+    const data = await payrollRunServices.approveRun(id, req.userId);
+    await recordAudit(req.userId, {
+      action: 'payrollRun.approve',
+      entity: 'PayrollRun',
+      entityId: id,
+      changes: diffFields(runSnapshot(before), runSnapshot(data), RUN_FIELDS),
+    }, res);
     res.status(StatusCode.OK).json({ success: true, message: 'Payroll run approved', data });
   } catch (error) {
     sendErrorResponse(res, error);
@@ -53,7 +91,15 @@ const approveRun = async (req: Request, res: Response) => {
 
 const markPaid = async (req: Request, res: Response) => {
   try {
-    const data = await payrollRunServices.markRunPaid(req.params._id as string);
+    const id = req.params._id as string;
+    const before = await payrollRunServices.getRunStatus(id);
+    const data = await payrollRunServices.markRunPaid(id);
+    await recordAudit(req.userId, {
+      action: 'payrollRun.pay',
+      entity: 'PayrollRun',
+      entityId: id,
+      changes: diffFields(runSnapshot(before), runSnapshot(data), RUN_FIELDS),
+    }, res);
     res.status(StatusCode.OK).json({ success: true, message: 'Payroll run marked paid', data });
   } catch (error) {
     sendErrorResponse(res, error);
@@ -63,7 +109,16 @@ const markPaid = async (req: Request, res: Response) => {
 const reverseRun = async (req: Request, res: Response) => {
   try {
     const { reason } = req.body as { reason?: string };
-    const data = await payrollRunServices.reverseRun(req.params._id as string, reason ?? '');
+    const id = req.params._id as string;
+    const before = await payrollRunServices.getRunStatus(id);
+    const data = await payrollRunServices.reverseRun(id, reason ?? '');
+    await recordAudit(req.userId, {
+      action: 'payrollRun.reverse',
+      entity: 'PayrollRun',
+      entityId: id,
+      ...(reason ? { detail: `reason: ${reason}` } : {}),
+      changes: diffFields(runSnapshot(before), runSnapshot(data), RUN_FIELDS),
+    }, res);
     res.status(StatusCode.OK).json({ success: true, message: 'Payroll run reversed', data });
   } catch (error) {
     sendErrorResponse(res, error);

@@ -23,7 +23,7 @@ describe('Payslips', () => {
     allowances: [{ type: 'transport', amount: 100 }],
     bonuses: [{ type: 'festival', amount: 50 }],
     deductions: [{ type: 'tax', amount: 200 }],
-    netPay: 999, // deliberately stale; the payslip derives its own figure
+    netPay: 999, // deliberately stale: the breakdown must not be silently rewritten
     payPeriodStart: new Date('2026-05-01'),
     payPeriodEnd: new Date('2026-05-31'),
     paymentMethod: 'bank transfer',
@@ -45,7 +45,11 @@ describe('Payslips', () => {
 
     expect(payslip.grossPay).toBe(1150);
     expect(payslip.totalDeductions).toBe(200);
-    expect(payslip.netPay).toBe(950);
+    // The recorded amount is what was paid; the lines are re-added separately so
+    // a stale record is visible rather than quietly presented as if it balanced.
+    expect(payslip.netPay).toBe(999);
+    expect(payslip.calculatedNetPay).toBe(950);
+    expect(payslip.reconciles).toBe(false);
     expect(payslip.earnings).toHaveLength(3);
     expect(payslip.employee.name).toBe('Diana');
   });
@@ -71,7 +75,8 @@ describe('Payslips', () => {
 
     expect(captured).toEqual({ employeeId: 'emp1' });
     expect(payslips).toHaveLength(1);
-    expect(payslips[0]!.netPay).toBe(950);
+    expect(payslips[0]!.netPay).toBe(999);
+    expect(payslips[0]!.calculatedNetPay).toBe(950);
   });
 
   it('returns nothing for a staff account that has no employee profile', async () => {

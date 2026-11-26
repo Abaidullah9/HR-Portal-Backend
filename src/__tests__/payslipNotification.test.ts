@@ -16,6 +16,10 @@ jest.mock('../services/payslipNotification.services', () => ({
   notifyPayslipCompleted: jest.fn(),
 }));
 
+jest.mock('../services/payslipSequence.services', () => ({
+  allocatePayslipNumbers: jest.fn().mockResolvedValue(['PS-202605-0001']),
+}));
+
 import { sendMail } from '../utils/mailer';
 import employeePayrollModelMock from '../models/employeePayroll.model';
 import { notifyPayslipCompleted } from '../services/payslipNotification.services';
@@ -106,8 +110,8 @@ describe('payroll status transition', () => {
     expect(notifyMock).toHaveBeenCalledTimes(1);
   });
 
-  it('does not notify again when completed is re-saved', async () => {
-    await setStatus('completed', 'completed');
+  it('refuses to re-save a completed record instead of notifying again', async () => {
+    await expect(setStatus('completed', 'completed')).rejects.toMatchObject({ statusCode: 409 });
     expect(notifyMock).not.toHaveBeenCalled();
   });
 

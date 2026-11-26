@@ -20,6 +20,7 @@ router.get("/manager/:managerId", isAuthenticated, authorize("read_Employee"), e
 router.get("/user/:userId", isAuthenticated, authorize("read_Employee"), employeeController.getEmployeeByUserId);
 router.get("/:_id/profile", isAuthenticated, authorize("read_Employee"), employeeController.getEmployeeProfile);
 router.get("/:_id/export", isAuthenticated, authorize("read_Employee"), employeeController.exportEmployeeData);
+router.post("/:_id/rehire", isAuthenticated, authorize("update_Employee"), employeeController.rehireEmployee);
 router.post("/:_id/anonymize", isAuthenticated, authorize("delete_Employee"), employeeController.anonymizeEmployee);
 router.get("/:_id", isAuthenticated, authorize("read_Employee"), employeeController.getEmployeeById);
 router.post("/", isAuthenticated, authorize("create_Employee"), validateResource(validateCreateEmployee), employeeController.addEmployee);

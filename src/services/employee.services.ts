@@ -11,14 +11,14 @@ import checklistTaskModel from '../models/checklistTask.model';
 import userModel from '../models/user.model';
 import attendanceModel from '../models/attendance.model';
 import goalModel from '../models/goal.model';
-import { inviteUser } from './user.services';
+import { inviteUser, sendReactivationInvite } from './user.services';
 import organizationSettingModel from '../models/organizationSetting.model';
 import { CreateEmployeeDTO } from '../utils/dtos/employee.dto';
 import { MESSAGES } from '../utils/helper/constants/messages';
 import { getPagination, paginatedResult, PaginationQuery } from '../utils/common';
 import { canAccessEmployee, type ReadScope } from '../utils/helper/ownership';
-import { tenantFilter, tenantFields } from '../utils/context';
-import { dayKey, isDayKey, todayKey } from '../utils/dates';
+import { runWithOrganization, tenantFilter, tenantFields } from '../utils/context';
+import { dayKey, endOfDay, isDayKey, todayKey } from '../utils/dates';
 import { diffFields, type FieldChange } from '../utils/helper/audit';
 import checklistServices from './checklist.services';
 import compensationServices from './compensation.services';
@@ -238,6 +238,146 @@ const updateEmployee = async (
   }
 
   return updatedEmployee;
+};
+
+/** Fields an HR operator can change while bringing somebody back. */
+export interface RehireInput {
+  joiningDate?: string;
+  position?: string;
+  departmentId?: string;
+  salary?: number;
+}
+
+/**
+ * Brings a leaver back without inventing a second employee record.
+ *
+ * The employee and login already exist, so rehire clears the exit date,
+ * reactivates both, invalidates every old session and sends a fresh invite: the
+ * person chooses a new password rather than inheriting whatever they had before
+ * they left.
+ */
+const rehireEmployee = async (
+  _id: string,
+  input: RehireInput,
+  onChanges?: (changes: FieldChange[]) => void,
+) => {
+  const before = await employeeModel.findOne(tenantFilter({ _id })).lean();
+  if (!before) throw new AppError(MESSAGES.EMPLOYEE_NOT_FOUND, StatusCode.NOT_FOUND);
+  if (before.isActive) throw new AppError(MESSAGES.EMPLOYEE_ALREADY_ACTIVE, StatusCode.CONFLICT);
+
+  const joiningDate = input.joiningDate?.trim() || todayKey();
+  if (!isDayKey(joiningDate)) {
+    throw new AppError('Use YYYY-MM-DD for the new joining date', StatusCode.BAD_REQUEST);
+  }
+  const salary = input.salary === undefined ? undefined : Number(input.salary);
+  if (salary !== undefined && (!Number.isFinite(salary) || salary < 0)) {
+    throw new AppError(MESSAGES.PAYROLL_INVALID_AMOUNT, StatusCode.BAD_REQUEST);
+  }
+
+  const setFields: Record<string, unknown> = {
+    isActive: true,
+    joiningDate: new Date(`${joiningDate}T00:00:00.000Z`),
+  };
+  if (input.position?.trim()) setFields.position = input.position.trim();
+  if (input.departmentId) setFields.departmentId = input.departmentId;
+  if (salary !== undefined) setFields.salary = salary;
+
+  const updated = await employeeModel
+    .findOneAndUpdate(
+      tenantFilter({ _id }),
+      { $set: setFields, $unset: { exitDate: 1 } },
+      { returnDocument: 'after' },
+    )
+    .populate('userId', 'name email isActive')
+    .populate('departmentId', 'name');
+  if (!updated) throw new AppError(MESSAGES.EMPLOYEE_NOT_FOUND, StatusCode.NOT_FOUND);
+
+  let inviteLink: string | undefined;
+  let delivered: boolean | undefined;
+
+  if (before.userId) {
+    const invite = await sendReactivationInvite(before.userId.toString());
+    inviteLink = invite.inviteLink;
+    delivered = invite.delivered;
+  } else {
+    // Legacy rows can predate the login; rehire creates the account it lacked.
+    const invite = await inviteUser({ name: before.name, email: before.email, roleName: 'Employee' });
+    await employeeModel.updateOne(tenantFilter({ _id }), { $set: { userId: invite.user._id } });
+    updated.userId = invite.user as any;
+    inviteLink = invite.inviteLink;
+    delivered = invite.delivered;
+  }
+
+  if (salary !== undefined && salary > 0) {
+    await compensationServices.recordCompensation({
+      employeeId: _id,
+      baseSalary: salary,
+      effectiveFrom: joiningDate,
+      reason: 'rehire',
+    });
+  }
+
+  await checklistServices.startChecklist(_id, 'onboarding', joiningDate);
+
+  if (onChanges) {
+    onChanges(diffFields(before as unknown as Record<string, unknown>, updated.toObject() as unknown as Record<string, unknown>));
+  }
+
+  return {
+    employee: updated,
+    ...(inviteLink ? { inviteLink } : {}),
+    ...(delivered !== undefined ? { delivered } : {}),
+  };
+};
+
+/**
+ * Daily offboarding sweep.
+ *
+ * Setting an exit date used to revoke access only if HR happened to save that
+ * record again on or after the date. This closes that gap: every active employee
+ * whose exit date has arrived loses their login, open sessions and pending
+ * invite/reset tokens even when nobody edits the record.
+ */
+const completeDueOffboarding = async (now: Date = new Date()) => {
+  const due = await employeeModel
+    .find(tenantFilter({ isActive: true, exitDate: { $ne: null, $lt: endOfDay(dayKey(now)) } }))
+    .select('_id userId');
+
+  let logins = 0;
+  for (const employee of due) {
+    if (employee.userId) logins += 1;
+    await revokeOffboardedAccess(employee.userId, employee._id.toString());
+  }
+
+  return { employees: due.length, logins };
+};
+
+/**
+ * Scheduler entry point: runs the offboarding sweep once per organisation.
+ *
+ * Doing it per organisation means the sweep uses the same tenant-scoped query
+ * as an HTTP request instead of an unscoped "all employees" update.
+ */
+const runScheduledOffboarding = async (now: Date = new Date()) => {
+  const organizationIds: unknown[] = await employeeModel.distinct('organizationId', {
+    organizationId: { $ne: null },
+    isActive: true,
+    exitDate: { $ne: null, $lt: endOfDay(dayKey(now)) },
+  });
+
+  let employees = 0;
+  let logins = 0;
+  for (const organizationId of organizationIds) {
+    const result = await runWithOrganization(
+      String(organizationId),
+      () => completeDueOffboarding(now),
+      'offboarding',
+    );
+    employees += result.employees;
+    logins += result.logins;
+  }
+
+  return { employees, logins, organizations: organizationIds.length };
 };
 
 const deleteEmployee = async (_id: string) => {
@@ -540,6 +680,9 @@ export default {
   getEmployeesByReportingManager,
   getActiveEmployees,
   updateEmployee,
+  rehireEmployee,
+  completeDueOffboarding,
+  runScheduledOffboarding,
   deleteEmployee,
   orgChart,
   getEmployeeProfile,

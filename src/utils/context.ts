@@ -22,6 +22,27 @@ export const runWithContext = <T>(context: RequestContext, callback: () => T): T
 
 export const currentContext = (): RequestContext | undefined => storage.getStore();
 
+/**
+ * Runs background work as one organisation.
+ *
+ * Schedulers start outside any request, where `tenantFilter` deliberately does
+ * nothing. Wrapping each organisation's slice in a context makes the same
+ * tenant-scoped services the HTTP path uses, so a job cannot quietly read or
+ * write another tenant's rows.
+ */
+export const runWithOrganization = <T>(
+  organizationId: string | undefined,
+  callback: () => T,
+  jobName = 'scheduler',
+): T =>
+  runWithContext(
+    {
+      requestId: `${jobName}:${organizationId ?? 'all'}`,
+      ...(organizationId ? { organizationId } : {}),
+    },
+    callback,
+  );
+
 export const requestIdOf = (): string => storage.getStore()?.requestId ?? 'no-request';
 
 export const contextUserId = (): string | undefined => storage.getStore()?.userId;

@@ -77,6 +77,45 @@ export const inviteUser = async (input: InviteInput, organizationId?: string) =>
   };
 };
 
+/**
+ * Re-opens a login after a rehire.
+ *
+ * The account keeps its identity, but every old session is invalidated and a
+ * fresh invite replaces any stale password: coming back to work should not mean
+ * coming back with the credentials from the previous stint.
+ */
+export const sendReactivationInvite = async (userId: string) => {
+  const user = await userModel.findOne(tenantFilter({ _id: userId }));
+  if (!user) throw new AppError(MESSAGES.USER_NOT_FOUND, StatusCode.NOT_FOUND);
+
+  const token = crypto.randomBytes(32).toString('hex');
+  await userModel.updateOne(
+    { _id: user._id },
+    {
+      $set: {
+        isActive: true,
+        inviteToken: hashToken(token),
+        inviteTokenExpires: new Date(Date.now() + inviteExpiryDays() * 24 * 60 * 60 * 1000),
+      },
+      $inc: { tokenVersion: 1 },
+      $unset: { resetToken: 1, resetTokenExpires: 1 },
+    },
+  );
+
+  const inviteLink = `${frontendUrl()}/accept-invite?token=${token}`;
+  const delivery = await sendMail({
+    to: user.email,
+    subject: 'Your HR portal account is active again',
+    text: `Hello ${user.name},\n\nYour account has been reactivated. Set a new password to sign in:\n${inviteLink}\n\nThe link expires in ${inviteExpiryDays()} days.`,
+  });
+
+  return {
+    inviteLink,
+    delivered: delivery.delivered,
+    ...(process.env.NODE_ENV !== 'production' ? { token } : {}),
+  };
+};
+
 const registerUser = async (userData: CreateUserDTO & { inviteToken?: string }) => {
   if (!userData) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
@@ -427,6 +466,7 @@ const updateUserRole = async (_id: string, roleId: string) => {
 export default {
   registerUser,
   inviteUser,
+  sendReactivationInvite,
   acceptInvite,
   loginUser,
   verifyMfaLogin,

@@ -8,7 +8,8 @@ import { CreateEmployeeDTO, UpdateEmployeeDTO } from "../utils/dtos/employee.dto
 import { PaginationQuery } from "../utils/common";
 import { recordAudit, type FieldChange } from "../utils/helper/audit";
 import { canAccessEmployee, resolveReadScope } from "../utils/helper/ownership";
-import type { ImportEmployeeRow } from "../services/employee.services";
+import type { ImportEmployeeRow, RehireInput } from "../services/employee.services";
+import { dayKey } from "../utils/dates";
 
 const addEmployee = async (req: Request, res: Response) => {
   try {
@@ -109,6 +110,28 @@ const updateEmployee = async (req: Request, res: Response) => {
     );
 
     res.status(StatusCode.OK).json({ success: true, message: MESSAGES.EMPLOYEE_UPDATED_SUCCESSFULLY, data: result });
+  } catch (error) {
+    sendErrorResponse(res, error);
+  }
+};
+
+const rehireEmployee = async (req: Request, res: Response) => {
+  try {
+    const { _id } = req.params;
+    const changes: FieldChange[] = [];
+    const result = await employeeServices.rehireEmployee(
+      _id as string,
+      (req.body ?? {}) as RehireInput,
+      (diff) => changes.push(...diff),
+    );
+    await recordAudit(req.userId, {
+      action: "employee.rehire",
+      entity: "Employee",
+      entityId: _id as string,
+      detail: `rejoined on ${dayKey(new Date(result.employee.joiningDate))}`,
+      changes,
+    }, res);
+    res.status(StatusCode.OK).json({ success: true, message: MESSAGES.EMPLOYEE_REHIRED_SUCCESSFULLY, data: result });
   } catch (error) {
     sendErrorResponse(res, error);
   }
@@ -222,5 +245,6 @@ export default {
   anonymizeEmployee,
   importEmployees,
   updateEmployee,
+  rehireEmployee,
   deleteEmployee,
 };

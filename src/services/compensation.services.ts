@@ -12,7 +12,7 @@ export interface CompensationInput {
   baseSalary: number;
   currency?: string;
   effectiveFrom?: string;
-  reason?: 'initial' | 'raise' | 'promotion' | 'adjustment' | 'correction';
+  reason?: 'initial' | 'raise' | 'promotion' | 'adjustment' | 'correction' | 'rehire';
   note?: string;
 }
 

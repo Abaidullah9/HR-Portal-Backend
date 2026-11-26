@@ -71,6 +71,8 @@ export const MESSAGES = {
   PAYROLL_INVALID_AMOUNT: "Amounts must be zero or more.",
   PAYROLL_INVALID_PERIOD: "The pay period end must not be before its start.",
   PAYROLL_INVALID_STATUS: "Payment status must be pending, completed or failed.",
+  EMPLOYEE_ALREADY_ACTIVE: "This employee is already active.",
+  EMPLOYEE_REHIRED_SUCCESSFULLY: "Employee reactivated and a new invite sent.",
   PAYROLL_NOT_PENDING: "Only an unpaid payroll record can change payment status.",
 
   // Feedback messages

@@ -7,7 +7,7 @@ export interface ICompensation extends Document {
   currency: string;
   /** First day this amount applies, as YYYY-MM-DD. */
   effectiveFrom: string;
-  reason: 'initial' | 'raise' | 'promotion' | 'adjustment' | 'correction';
+  reason: 'initial' | 'raise' | 'promotion' | 'adjustment' | 'correction' | 'rehire';
   note?: string;
   createdBy?: mongoose.Types.ObjectId;
 }
@@ -20,7 +20,7 @@ const compensationSchema = new Schema<ICompensation>({
   effectiveFrom: { type: String, required: true, match: /^\d{4}-\d{2}-\d{2}$/, index: true },
   reason: {
     type: String,
-    enum: ['initial', 'raise', 'promotion', 'adjustment', 'correction'],
+    enum: ['initial', 'raise', 'promotion', 'adjustment', 'correction', 'rehire'],
     required: true,
     default: 'adjustment',
   },

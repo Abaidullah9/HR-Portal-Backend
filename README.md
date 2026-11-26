@@ -10,7 +10,7 @@ Pairs with the [HR Portal Frontend](https://github.com/Abaidullah9/HR-Portal-Fro
 - **Framework:** Express 5
 - **Database:** MongoDB with Mongoose 9
 - **Auth:** JWT in httpOnly cookies
-- **Testing:** Jest + Supertest (58 tests)
+- **Testing:** Jest + Supertest, with a real MongoDB layer for payroll, tenant and offboarding flows
 
 ## Deployment
 
@@ -56,6 +56,18 @@ npm run dev
 ```
 
 The API is now available at `http://localhost:5000/api/v1`.
+
+## Payroll and scheduled work
+
+Payroll runs move `draft → approved → paid` (or `reversed`) and are the only place payslip
+numbers are issued, from an atomic per-organisation counter. Manual payroll records are also
+supported; the server computes their totals and adds statutory deductions from organization
+settings. A record owned by a payroll run, or one already paid, is read-only through the CRUD
+routes.
+
+Two daily jobs run without a request: leave accrual and document retention, plus an offboarding
+sweep that revokes an employee's login, sessions and pending invite/reset tokens once their exit
+date arrives. Each job takes a database lease, so multiple API instances do not run it twice.
 
 ## Environment Variables
 

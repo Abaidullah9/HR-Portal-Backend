@@ -23,7 +23,7 @@ mode for split hostnames, mail provider, object storage, proxy settings).
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 24+
 - MongoDB running locally (or a connection string for a remote cluster)
 
 ### Setup

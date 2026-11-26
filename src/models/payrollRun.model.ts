@@ -11,6 +11,12 @@ export interface IPayrollRun extends Document {
   totalNetPay: number;
   currency: string;
   notes?: string;
+  /**
+   * Client-supplied key that makes `POST /payroll-runs` safe to retry. Two
+   * requests carrying the same key resolve to the same run instead of paying
+   * everyone twice.
+   */
+  idempotencyKey?: string;
   createdBy?: mongoose.Types.ObjectId;
   approvedBy?: mongoose.Types.ObjectId;
   approvedAt?: Date;
@@ -28,6 +34,7 @@ const payrollRunSchema = new Schema<IPayrollRun>({
   totalNetPay: { type: Number, default: 0 },
   currency: { type: String, default: 'PKR', uppercase: true, trim: true },
   notes: { type: String, trim: true },
+  idempotencyKey: { type: String, trim: true },
   createdBy: { type: Schema.Types.ObjectId, ref: 'User' },
   approvedBy: { type: Schema.Types.ObjectId, ref: 'User' },
   approvedAt: { type: Date },
@@ -36,6 +43,17 @@ const payrollRunSchema = new Schema<IPayrollRun>({
   reversalReason: { type: String, trim: true },
 }, { timestamps: true });
 
-payrollRunSchema.index({ organizationId: 1, periodStart: 1, periodEnd: 1 }, { unique: true, sparse: true });
+// Deliberately not unique on the period. Reversing a wrong run is the documented
+// recovery path, and the replacement run covers the same dates; a unique period
+// index turned that path into E11000. Overlapping non-reversed runs are refused
+// by `generateRun`'s overlap query, which is the rule that actually matters.
+payrollRunSchema.index({ organizationId: 1, periodStart: 1, periodEnd: 1 });
+
+// One run per idempotency key. Partial rather than sparse so runs created without
+// a key are not all treated as sharing a null key.
+payrollRunSchema.index(
+  { organizationId: 1, idempotencyKey: 1 },
+  { unique: true, partialFilterExpression: { idempotencyKey: { $type: 'string' } } },
+);
 
 export default mongoose.model<IPayrollRun>('PayrollRun', payrollRunSchema);

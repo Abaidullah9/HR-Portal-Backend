@@ -17,8 +17,17 @@ const listRuns = async (req: Request, res: Response) => {
 
 const generateRun = async (req: Request, res: Response) => {
   try {
-    const data = await payrollRunServices.generateRun(req.body, req.userId);
-    res.status(StatusCode.CREATED).json({ success: true, message: 'Payroll draft created', data });
+    // The header wins so a retrying client does not have to mutate the body.
+    const idempotencyKey = req.get('Idempotency-Key') ?? (req.body as { idempotencyKey?: string })?.idempotencyKey;
+    const data = await payrollRunServices.generateRun(
+      { ...req.body, ...(idempotencyKey ? { idempotencyKey } : {}) },
+      req.userId,
+    );
+    res.status(data.replayed ? StatusCode.OK : StatusCode.CREATED).json({
+      success: true,
+      message: data.replayed ? 'Payroll run already exists for that request' : 'Payroll draft created',
+      data,
+    });
   } catch (error) {
     sendErrorResponse(res, error);
   }

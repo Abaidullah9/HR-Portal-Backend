@@ -15,26 +15,24 @@ import { tenantFields, tenantFilter } from '../utils/context';
 import {
   dayRate,
   proratedSalary,
-  statutoryDeductions,
+  statutoryDeductionsForPeriod,
   unpaidLeaveDays,
   type UnpaidLeaveLike,
 } from '../utils/payrollStatutory';
-import { endOfDay, isDayKey, startOfDay, todayKey, workingDaysBetween } from '../utils/dates';
+import { dayKey, endOfDay, isDayKey, startOfDay, todayKey, workingDaysBetween } from '../utils/dates';
 import { toCsv } from '../utils/csv';
 import { getPagination, paginatedResult, type PaginationQuery } from '../utils/common';
-
-const roundMoney = (value: number) => Math.round(value * 100) / 100;
+import { roundMoney, sumMoney } from '../utils/money';
+import { allocatePayslipNumbers } from './payslipSequence.services';
 
 export interface GenerateRunInput {
   periodStart: string;
   periodEnd: string;
   notes?: string;
   currency?: string;
+  /** Client-supplied key that makes a retried create resolve to the same run. */
+  idempotencyKey?: string;
 }
-
-/** A payslip reference that is stable to read out over the phone. */
-const payslipNumber = (periodEnd: string, index: number) =>
-  `PS-${periodEnd.slice(0, 7).replace('-', '')}-${String(index + 1).padStart(4, '0')}`;
 
 /**
  * Generates one payroll run.
@@ -47,6 +45,9 @@ const payslipNumber = (periodEnd: string, index: number) =>
  * A run has exactly one currency. Adding rupees to dollars produces a total
  * that means nothing, so a member paid in another currency rejects the run
  * before anything is written.
+ *
+ * Retrying the create with the same `idempotencyKey` returns the existing run:
+ * a double-click must not create two overlapping drafts.
  */
 export const generateRun = async (input: GenerateRunInput, actorId?: string) => {
   if (!isDayKey(input.periodStart) || !isDayKey(input.periodEnd)) {
@@ -54,6 +55,15 @@ export const generateRun = async (input: GenerateRunInput, actorId?: string) => 
   }
   if (input.periodEnd < input.periodStart) {
     throw new AppError('The pay period end must be after its start', StatusCode.BAD_REQUEST);
+  }
+
+  const idempotencyKey = input.idempotencyKey?.trim();
+  if (idempotencyKey && idempotencyKey.length > 128) {
+    throw new AppError('The idempotency key must be at most 128 characters', StatusCode.BAD_REQUEST);
+  }
+  if (idempotencyKey) {
+    const existing = await payrollRunModel.findOne(tenantFilter({ idempotencyKey }));
+    if (existing) return { run: existing, created: 0, skipped: 0, replayed: true };
   }
 
   const settings = await organizationStatutorySettings();
@@ -116,6 +126,12 @@ export const generateRun = async (input: GenerateRunInput, actorId?: string) => 
     unpaidByEmployee.set(key, list);
   }
 
+  // Two queries for the whole batch instead of two per employee.
+  const rates = await compensationServices.ratesEffectiveOn(
+    employees.map((employee) => employee._id.toString()),
+    input.periodEnd,
+  );
+
   const priced: {
     employeeId: mongoose.Types.ObjectId;
     baseSalary: number;
@@ -126,14 +142,15 @@ export const generateRun = async (input: GenerateRunInput, actorId?: string) => 
 
   for (const employee of employees) {
     const employeeId = employee._id.toString();
-    const salary = await compensationServices.salaryEffectiveOn(employeeId, input.periodEnd);
+    const rate = rates.get(employeeId);
+    const salary = rate?.baseSalary;
     if (!salary || salary <= 0) {
       skipped += 1;
       continue;
     }
 
     // An employee with no compensation row is paid in the organisation currency.
-    const currency = (await compensationServices.currencyFor(employeeId)) ?? runCurrency;
+    const currency = rate?.currency ?? runCurrency;
     if (currency !== runCurrency) {
       throw new AppError(
         `This run is in ${runCurrency}, but ${employee.name} (${employee.employeeCode ?? employee._id}) is paid in ${currency}. One run cannot mix currencies.`,
@@ -157,16 +174,26 @@ export const generateRun = async (input: GenerateRunInput, actorId?: string) => 
     }
 
     const baseSalary = roundMoney(proration.amount);
-    const unpaidDays = unpaidLeaveDays(
-      unpaidByEmployee.get(employeeId) ?? [],
-      input.periodStart,
-      input.periodEnd,
-      workingDayOptions,
-    );
+
+    // Unpaid leave only counts inside the employment window: leave recorded
+    // before joining (or after exit) must not deduct money from this run.
+    const joinedOn = employee.joiningDate ? dayKey(employee.joiningDate) : input.periodStart;
+    const leftOn = employee.exitDate ? dayKey(employee.exitDate) : input.periodEnd;
+    const windowStart = joinedOn > input.periodStart ? joinedOn : input.periodStart;
+    const windowEnd = leftOn < input.periodEnd ? leftOn : input.periodEnd;
+    const unpaidDays =
+      windowStart <= windowEnd
+        ? unpaidLeaveDays(unpaidByEmployee.get(employeeId) ?? [], windowStart, windowEnd, workingDayOptions)
+        : 0;
     const unpaidAmount = roundMoney(Math.min(dayRate(baseSalary, proration.payableDays) * unpaidDays, baseSalary));
 
     const taxablePay = roundMoney(baseSalary - unpaidAmount);
-    const statutory = statutoryDeductions(taxablePay, settings);
+    // Tax is annualised from the contractual salary, then prorated to the money
+    // actually paid; annualising the prorated figure would under-withhold.
+    const statutory = statutoryDeductionsForPeriod(
+      { contractualMonthly: salary, taxablePay },
+      settings,
+    );
 
     const deductions = [
       ...(unpaidAmount > 0
@@ -180,7 +207,7 @@ export const generateRun = async (input: GenerateRunInput, actorId?: string) => 
         : []),
       ...statutory.deductions,
     ];
-    const totalDeductions = roundMoney(deductions.reduce((total, item) => total + item.amount, 0));
+    const totalDeductions = sumMoney(deductions.map((item) => item.amount));
 
     priced.push({
       employeeId: employee._id,
@@ -192,25 +219,36 @@ export const generateRun = async (input: GenerateRunInput, actorId?: string) => 
 
   // Every rejection above happens before the run exists, so a refused run leaves
   // no draft behind for somebody to reverse.
-  const totalNetPay = roundMoney(priced.reduce((total, item) => total + item.netPay, 0));
+  const totalNetPay = sumMoney(priced.map((item) => item.netPay));
 
-  const run = await payrollRunModel.create({
-    ...tenantFields(),
-    periodStart: input.periodStart,
-    periodEnd: input.periodEnd,
-    status: 'draft',
-    employeeCount: priced.length,
-    totalNetPay,
-    currency: runCurrency,
-    ...(input.notes ? { notes: input.notes } : {}),
-    ...(actorId ? { createdBy: actorId } : {}),
-  });
+  let run;
+  try {
+    run = await payrollRunModel.create({
+      ...tenantFields(),
+      periodStart: input.periodStart,
+      periodEnd: input.periodEnd,
+      status: 'draft',
+      employeeCount: priced.length,
+      totalNetPay,
+      currency: runCurrency,
+      ...(input.notes ? { notes: input.notes } : {}),
+      ...(idempotencyKey ? { idempotencyKey } : {}),
+      ...(actorId ? { createdBy: actorId } : {}),
+    });
+  } catch (error) {
+    // Two concurrent requests with the same key: the loser reads the winner's run
+    // instead of reporting a duplicate-key error to the user.
+    if (idempotencyKey && (error as { code?: number })?.code === 11000) {
+      const existing = await payrollRunModel.findOne(tenantFilter({ idempotencyKey }));
+      if (existing) return { run: existing, created: 0, skipped: 0, replayed: true };
+    }
+    throw error;
+  }
 
-  const records = priced.map((item, index) => ({
+  const records = priced.map((item) => ({
     ...tenantFields(),
     employeeId: item.employeeId,
     payRunId: run._id,
-    payslipNumber: payslipNumber(input.periodEnd, index),
     baseSalary: item.baseSalary,
     currency: runCurrency,
     allowances: [],
@@ -236,7 +274,7 @@ export const generateRun = async (input: GenerateRunInput, actorId?: string) => 
     );
   }
 
-  return { run, created: records.length, skipped };
+  return { run, created: records.length, skipped, replayed: false };
 };
 
 export const listRuns = async (query: PaginationQuery & { status?: string }) => {
@@ -263,6 +301,37 @@ export const getRun = async (runId: string) => {
   return { run, records };
 };
 
+/**
+ * Gives every slip in a run its permanent reference, once.
+ *
+ * Draft records have no number because a draft may be deleted; numbers are
+ * allocated when the run is issued (approved). A re-run after a reversal gets
+ * fresh numbers from the counter, so it can never collide with the reversed
+ * slips that still carry theirs.
+ */
+const assignPayslipNumbers = async (run: { _id: mongoose.Types.ObjectId; periodStart: string }) => {
+  const missing = await payrollModel
+    .find(
+      tenantFilter({
+        payRunId: run._id,
+        $or: [{ payslipNumber: { $exists: false } }, { payslipNumber: null }],
+      }),
+    )
+    .select('_id')
+    .sort({ createdAt: 1 })
+    .lean();
+  if (missing.length === 0) return;
+
+  const numbers = await allocatePayslipNumbers(run.periodStart.slice(0, 7), missing.length);
+  const updates = missing.flatMap((record, index) => {
+    const payslipNumber = numbers[index];
+    return payslipNumber
+      ? [{ updateOne: { filter: tenantFilter({ _id: record._id }), update: { $set: { payslipNumber } } } }]
+      : [];
+  });
+  if (updates.length > 0) await payrollModel.bulkWrite(updates);
+};
+
 const requireStatus = (status: string, allowed: string[]) => {
   if (!allowed.includes(status)) {
     throw new AppError(
@@ -276,6 +345,10 @@ export const approveRun = async (runId: string, actorId?: string) => {
   const run = await payrollRunModel.findOne(tenantFilter({ _id: runId }));
   if (!run) throw new AppError('Payroll run not found', StatusCode.NOT_FOUND);
   requireStatus(run.status, ['draft']);
+
+  // Allocation happens before the status change: if numbering fails, the run
+  // stays a draft rather than becoming an approved run with unusable slips.
+  await assignPayslipNumbers(run);
 
   run.status = 'approved';
   run.approvedAt = new Date();
@@ -303,8 +376,10 @@ export const approveRun = async (runId: string, actorId?: string) => {
  */
 const notifyRunPaid = async (runId: mongoose.Types.ObjectId) => {
   try {
+    // The caller already fetched the run under tenant scope; keep the invariant
+    // here too so a future caller cannot leak another organisation's payslips.
     const records = await payrollModel
-      .find({ payRunId: runId })
+      .find(tenantFilter({ payRunId: runId }))
       .populate('employeeId', 'name email userId')
       .lean();
 
@@ -318,7 +393,7 @@ const notifyRunPaid = async (runId: mongoose.Types.ObjectId) => {
     if (userIds.length === 0) return;
 
     const activeUsers = await userModel
-      .find({ _id: { $in: userIds }, isActive: true })
+      .find(tenantFilter({ _id: { $in: userIds }, isActive: true }))
       .select('_id')
       .lean();
     const active = new Set(activeUsers.map((user) => String(user._id)));
@@ -345,6 +420,9 @@ export const markRunPaid = async (runId: string) => {
   const run = await payrollRunModel.findOne(tenantFilter({ _id: runId }));
   if (!run) throw new AppError('Payroll run not found', StatusCode.NOT_FOUND);
   requireStatus(run.status, ['approved']);
+
+  // Runs approved before numbering moved to issue time have no references yet.
+  await assignPayslipNumbers(run);
 
   run.status = 'paid';
   run.paidAt = new Date();
@@ -408,7 +486,7 @@ export const runCsv = async (runId: string): Promise<{ filename: string; csv: st
   ];
   const rows = records.map((record) => {
     const employee = record.employeeId as unknown as { name?: string; email?: string; employeeCode?: string } | null;
-    const deductions = (record.deductions ?? []).reduce((total, item) => total + (item.amount ?? 0), 0);
+    const deductions = sumMoney((record.deductions ?? []).map((item) => item.amount ?? 0));
     return [
       record.payslipNumber ?? '',
       employee?.employeeCode ?? '',
@@ -430,10 +508,20 @@ export const runCsv = async (runId: string): Promise<{ filename: string; csv: st
   };
 };
 
+/** Lightweight read used by audit entries before and after a transition. */
+export const getRunStatus = async (runId: string) => {
+  const run = await payrollRunModel
+    .findOne(tenantFilter({ _id: runId }))
+    .select('status periodStart periodEnd employeeCount totalNetPay currency');
+  if (!run) throw new AppError('Payroll run not found', StatusCode.NOT_FOUND);
+  return run;
+};
+
 export default {
   generateRun,
   listRuns,
   getRun,
+  getRunStatus,
   approveRun,
   markRunPaid,
   reverseRun,

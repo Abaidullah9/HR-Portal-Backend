@@ -69,7 +69,13 @@ async function seedDatabase() {
     await mongoose.syncIndexes();
 
     console.log('🌱 Seeding Organization Settings...');
+    // The organisation id is the settings document's id, and every tenant-owned
+    // record (roles, users, employees) carries it. Settings must carry it too or
+    // the request-scoped lookup cannot find this document.
+    const orgId = new mongoose.Types.ObjectId();
     const orgSettings = await OrganizationSetting.create({
+      _id: orgId,
+      organizationId: orgId,
       organizationName: 'TechCorp Pakistan',
       email: 'admin@techcorp.com',
       phone: '+92-21-111-222-333',
@@ -275,8 +281,6 @@ async function seedDatabase() {
 
     console.log('🌱 Seeding Users...');
     const hashedPassword = await bcrypt.hash('Password123!', 10);
-
-    const orgId = orgSettings._id;
 
     // Users carry the tenant too: request context derives organizationId from
     // the session user, and employee queries are scoped by it.

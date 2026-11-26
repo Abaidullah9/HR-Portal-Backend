@@ -1,6 +1,8 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IOrganizationSetting extends Document {
+  /** Tenant key. The seed uses the settings document's own id as the organisation id. */
+  organizationId?: mongoose.Types.ObjectId;
   organizationName: string;
   email: string;
   phone?: string;
@@ -23,6 +25,7 @@ export interface IOrganizationSetting extends Document {
   logoUrl?: string;
 }
 const organizationSettingSchema = new Schema<IOrganizationSetting>({
+  organizationId: { type: Schema.Types.ObjectId, ref: 'Organization' },
   organizationName: { type: String, required: true },
   email: { type: String, required: true, lowercase: true },
   phone: { type: String, trim: true },
@@ -37,4 +40,7 @@ const organizationSettingSchema = new Schema<IOrganizationSetting>({
   providentFundEmployerPercent: { type: Number, default: 0, min: 0, max: 100 },
   logoUrl: { type: String }
 }, { timestamps: true });
+// One settings document per organisation; a document created before the field
+// existed (missing rather than null) is ignored by the sparse index.
+organizationSettingSchema.index({ organizationId: 1 }, { unique: true, sparse: true });
 export default mongoose.model<IOrganizationSetting>('Organization', organizationSettingSchema);

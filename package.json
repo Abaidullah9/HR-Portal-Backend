@@ -10,6 +10,7 @@
     "seed": "tsx src/utils/seed.ts",
     "db:backup": "tsx src/scripts/mongo-backup.ts",
     "db:restore": "tsx src/scripts/mongo-restore.ts",
+    "db:backfill-payslips": "tsx src/scripts/backfill-payslip-numbers.ts",
     "debug": "node --inspect-brk -r ts-node/register src/server.ts",
     "test": "jest",
     "test:coverage": "jest --coverage"

@@ -36,6 +36,7 @@ jest.mock('../services/compensation.services', () => ({
   default: {
     salaryEffectiveOn: jest.fn(),
     currencyFor: jest.fn(),
+    ratesEffectiveOn: jest.fn(),
   },
 }));
 
@@ -77,6 +78,7 @@ const leaveRequests = leaveRequestModel as unknown as { find: jest.Mock };
 const compensation = compensationServices as unknown as {
   salaryEffectiveOn: jest.Mock;
   currencyFor: jest.Mock;
+  ratesEffectiveOn: jest.Mock;
 };
 const settings = organizationSettingServices as unknown as {
   organizationCurrency: jest.Mock;
@@ -116,8 +118,9 @@ beforeEach(() => {
 
 describe('payroll run currency', () => {
   it('refuses a run that mixes currencies before writing anything', async () => {
-    compensation.salaryEffectiveOn.mockResolvedValue(190000);
-    compensation.currencyFor.mockResolvedValue('USD');
+    compensation.ratesEffectiveOn.mockResolvedValue(
+      new Map([['emp1', { baseSalary: 190000, currency: 'USD' }]]),
+    );
 
     await expect(
       payrollRunServices.generateRun({ periodStart: '2026-11-01', periodEnd: '2026-11-30' }),
@@ -128,8 +131,9 @@ describe('payroll run currency', () => {
   });
 
   it('stamps the organisation currency on the run and its records', async () => {
-    compensation.salaryEffectiveOn.mockResolvedValue(190000);
-    compensation.currencyFor.mockResolvedValue('PKR');
+    compensation.ratesEffectiveOn.mockResolvedValue(
+      new Map([['emp1', { baseSalary: 190000, currency: 'PKR' }]]),
+    );
 
     const result = await payrollRunServices.generateRun({
       periodStart: '2026-11-01',
@@ -143,9 +147,13 @@ describe('payroll run currency', () => {
       expect.objectContaining({
         currency: 'PKR',
         netPay: 190000,
-        payslipNumber: 'PS-202611-0001',
       }),
     ]);
+    // A draft must not consume a permanent payslip reference; numbering happens
+    // when the run is approved.
+    const firstRecord = payroll.insertMany.mock.calls[0]?.[0]?.[0];
+    expect(firstRecord?.payslipNumber).toBeUndefined();
+
     expect(runModel.create).toHaveBeenCalledWith(
       expect.objectContaining({ employeeCount: 1, totalNetPay: 190000, currency: 'PKR' }),
     );
@@ -153,8 +161,9 @@ describe('payroll run currency', () => {
   });
 
   it('honours an explicit run currency instead of the organisation default', async () => {
-    compensation.salaryEffectiveOn.mockResolvedValue(1000);
-    compensation.currencyFor.mockResolvedValue('AED');
+    compensation.ratesEffectiveOn.mockResolvedValue(
+      new Map([['emp1', { baseSalary: 1000, currency: 'AED' }]]),
+    );
 
     await payrollRunServices.generateRun({
       periodStart: '2026-11-01',

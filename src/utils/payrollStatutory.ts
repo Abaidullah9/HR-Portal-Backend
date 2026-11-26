@@ -92,27 +92,55 @@ export interface StatutoryBreakdown {
   employerProvidentFund: number;
 }
 
+export interface PeriodStatutoryInput {
+  /**
+   * The employee's full contractual monthly salary. Tax is annualised from this,
+   * never from the prorated amount actually paid this period.
+   */
+  contractualMonthly: number;
+  /** Taxable pay earned in this period, after joining/exit proration and unpaid leave. */
+  taxablePay: number;
+}
+
 /**
- * Statutory deductions for one month. Tax is computed on what is actually
- * taxable after unpaid leave, so a month without pay does not withhold tax on
- * money that was never earned.
+ * Statutory deductions for one pay period.
+ *
+ * Income tax is progressive, so annualising a half-month payment under-withholds:
+ * a joiner paid one week is not on a low salary, they are on their annual salary
+ * for one week. The withholding is therefore computed from the contractual
+ * monthly salary and then prorated by the share of the month actually paid.
+ *
+ * EOBI is a flat monthly contribution on the minimum wage; the same share rule
+ * applies, so a five-day joiner is not charged a full month's contribution.
+ * Provident fund is a percentage of what was actually earned.
+ *
+ * "Share of the month" is taxablePay / contractualMonthly: with day-rate
+ * proration this equals paid working days / period working days.
  */
-export const statutoryDeductions = (
-  monthlyTaxable: number,
+export const statutoryDeductionsForPeriod = (
+  input: PeriodStatutoryInput,
   settings: StatutorySettings = DEFAULT_STATUTORY_SETTINGS,
 ): StatutoryBreakdown => {
   const deductions: Deduction[] = [];
-  const taxable = Math.max(roundMoney(monthlyTaxable), 0);
+  const contractual = Math.max(roundMoney(input.contractualMonthly), 0);
+  const taxable = Math.max(roundMoney(input.taxablePay), 0);
+  const fraction =
+    contractual > 0 ? Math.min(1, Math.max(0, taxable / contractual)) : taxable > 0 ? 1 : 0;
 
-  const incomeTax = settings.taxEnabled ? monthlyIncomeTax(taxable) : 0;
+  const incomeTax =
+    settings.taxEnabled && fraction > 0 ? roundMoney(monthlyIncomeTax(contractual) * fraction) : 0;
   if (incomeTax > 0) {
     deductions.push({ type: 'Income tax', amount: incomeTax, note: 'Monthly withholding (salaried slabs)' });
   }
 
   const wage = settings.minimumWage > 0 ? settings.minimumWage : DEFAULT_MINIMUM_WAGE;
-  const eobi = settings.eobiEnabled ? roundMoney(wage * EOBI_EMPLOYEE_RATE) : 0;
+  const eobi = settings.eobiEnabled ? roundMoney(wage * EOBI_EMPLOYEE_RATE * fraction) : 0;
   if (eobi > 0) {
-    deductions.push({ type: 'EOBI', amount: eobi, note: 'Employee contribution' });
+    deductions.push({
+      type: 'EOBI',
+      amount: eobi,
+      note: fraction < 1 ? 'Employee contribution (prorated)' : 'Employee contribution',
+    });
   }
 
   const pfPercent = settings.providentFundEmployeePercent;
@@ -132,6 +160,20 @@ export const statutoryDeductions = (
 
   return { deductions, incomeTax, eobi, providentFund, employerProvidentFund };
 };
+
+/**
+ * Statutory deductions for a full month. Kept for callers that hold only the
+ * monthly taxable figure; a partial month must use
+ * `statutoryDeductionsForPeriod` so the tax is annualised correctly.
+ */
+export const statutoryDeductions = (
+  monthlyTaxable: number,
+  settings: StatutorySettings = DEFAULT_STATUTORY_SETTINGS,
+): StatutoryBreakdown =>
+  statutoryDeductionsForPeriod(
+    { contractualMonthly: monthlyTaxable, taxablePay: monthlyTaxable },
+    settings,
+  );
 
 export interface Proration {
   /** Money payable for the period after joining/exit proration. */

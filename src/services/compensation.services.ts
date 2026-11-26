@@ -5,6 +5,7 @@ import { StatusCode } from '../utils/helper/constants/enum';
 import { tenantFields, tenantFilter } from '../utils/context';
 import { isDayKey, todayKey } from '../utils/dates';
 import { organizationCurrency } from './organizationSetting.services';
+import { roundMoney } from '../utils/money';
 
 export interface CompensationInput {
   employeeId: string;
@@ -14,8 +15,6 @@ export interface CompensationInput {
   reason?: 'initial' | 'raise' | 'promotion' | 'adjustment' | 'correction';
   note?: string;
 }
-
-const roundMoney = (value: number) => Math.round(value * 100) / 100;
 
 /**
  * Records a compensation change. `Employee.salary` stays as the current figure
@@ -81,9 +80,62 @@ export const currencyFor = async (employeeId: string): Promise<string | undefine
   return record?.currency;
 };
 
+export interface EffectiveRate {
+  baseSalary: number;
+  currency?: string;
+}
+
+/**
+ * The rate in force on a day for many employees at once.
+ *
+ * Payroll used two queries per employee (salary, then currency); at a few hundred
+ * employees that is hundreds of round trips for one run. This resolves the whole
+ * batch in two queries and lets pricing happen in memory. The employee record is
+ * only a fallback for people who have no compensation history yet.
+ */
+export const ratesEffectiveOn = async (
+  employeeIds: string[],
+  day: string,
+): Promise<Map<string, EffectiveRate>> => {
+  const ids = [...new Set(employeeIds.filter((id) => Boolean(id)))];
+  const rates = new Map<string, EffectiveRate>();
+  if (ids.length === 0) return rates;
+
+  const [rows, employees] = await Promise.all([
+    compensationModel
+      .find(tenantFilter({ employeeId: { $in: ids }, effectiveFrom: { $lte: day } }))
+      .sort({ effectiveFrom: 1, createdAt: 1 })
+      .lean(),
+    employeeModel.find(tenantFilter({ _id: { $in: ids } })).select('salary').lean(),
+  ]);
+
+  // Ascending order means the last row per employee is the effective one.
+  for (const row of rows as unknown as { employeeId: unknown; baseSalary: number; currency?: string }[]) {
+    rates.set(String(row.employeeId), {
+      baseSalary: row.baseSalary,
+      ...(row.currency ? { currency: row.currency } : {}),
+    });
+  }
+
+  const salaryById = new Map(
+    (employees as unknown as { _id: unknown; salary?: number }[]).map((employee) => [
+      String(employee._id),
+      employee.salary,
+    ]),
+  );
+  for (const id of ids) {
+    if (rates.has(id)) continue;
+    const fallback = salaryById.get(id);
+    if (fallback !== undefined) rates.set(id, { baseSalary: fallback });
+  }
+
+  return rates;
+};
+
 export default {
   recordCompensation,
   listCompensation,
   salaryEffectiveOn,
   currencyFor,
+  ratesEffectiveOn,
 };

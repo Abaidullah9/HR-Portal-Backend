@@ -22,6 +22,8 @@ export interface IUser extends Document {
   /** Base32 TOTP secret. A secret without `mfaEnabled` is a pending setup. */
   mfaSecret?: string;
   mfaEnabled?: boolean;
+  /** SHA-256 hashes of unused one-time recovery codes. */
+  mfaRecoveryCodes?: string[];
   /**
    * Session generation. Tokens carry the value they were minted with; bumping
    * this field makes every previously issued token stop working.
@@ -43,6 +45,7 @@ const userSchema = new Schema<IUser>({
   passwordChangedAt: { type: Date },
   mfaSecret: { type: String, select: false },
   mfaEnabled: { type: Boolean, default: false },
+  mfaRecoveryCodes: { type: [String], select: false, default: undefined },
   tokenVersion: { type: Number, default: 0 }
 }, { timestamps: true });
 export default mongoose.model<IUser>('User', userSchema);

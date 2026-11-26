@@ -5,6 +5,9 @@
  * different currency must reject the run *before* anything is written. These
  * tests pin both halves: the refusal leaves no draft behind, and an accepted
  * run stamps every record with the organisation's currency.
+ *
+ * Statutory deductions are switched off here so the assertions stay about
+ * currency; the tax arithmetic has its own suite.
  */
 jest.mock('../models/payrollRun.model', () => ({
   findOne: jest.fn(),
@@ -13,9 +16,18 @@ jest.mock('../models/payrollRun.model', () => ({
 
 jest.mock('../models/employeePayroll.model', () => ({
   insertMany: jest.fn(),
+  updateMany: jest.fn(),
 }));
 
 jest.mock('../models/employee.model', () => ({
+  find: jest.fn(),
+}));
+
+jest.mock('../models/leaveRequest.model', () => ({
+  find: jest.fn(),
+}));
+
+jest.mock('../models/user.model', () => ({
   find: jest.fn(),
 }));
 
@@ -29,8 +41,20 @@ jest.mock('../services/compensation.services', () => ({
 
 jest.mock('../services/organizationSetting.services', () => {
   const organizationCurrency = jest.fn();
-  return { __esModule: true, organizationCurrency, default: { organizationCurrency } };
+  const organizationStatutorySettings = jest.fn();
+  return {
+    __esModule: true,
+    organizationCurrency,
+    organizationStatutorySettings,
+    default: { organizationCurrency, organizationStatutorySettings },
+  };
 });
+
+jest.mock('../services/holiday.services', () => ({
+  __esModule: true,
+  default: { holidayKeysBetween: jest.fn() },
+  holidayKeysBetween: jest.fn(),
+}));
 
 jest.mock('../services/notification.services', () => ({
   __esModule: true,
@@ -41,17 +65,24 @@ import payrollRunServices from '../services/payrollRun.services';
 import payrollRunModel from '../models/payrollRun.model';
 import payrollModel from '../models/employeePayroll.model';
 import employeeModel from '../models/employee.model';
+import leaveRequestModel from '../models/leaveRequest.model';
 import compensationServices from '../services/compensation.services';
 import organizationSettingServices from '../services/organizationSetting.services';
+import holidayServices from '../services/holiday.services';
 
 const runModel = payrollRunModel as unknown as { findOne: jest.Mock; create: jest.Mock };
-const payroll = payrollModel as unknown as { insertMany: jest.Mock };
+const payroll = payrollModel as unknown as { insertMany: jest.Mock; updateMany: jest.Mock };
 const employees = employeeModel as unknown as { find: jest.Mock };
+const leaveRequests = leaveRequestModel as unknown as { find: jest.Mock };
 const compensation = compensationServices as unknown as {
   salaryEffectiveOn: jest.Mock;
   currencyFor: jest.Mock;
 };
-const settings = organizationSettingServices as unknown as { organizationCurrency: jest.Mock };
+const settings = organizationSettingServices as unknown as {
+  organizationCurrency: jest.Mock;
+  organizationStatutorySettings: jest.Mock;
+};
+const holidays = holidayServices as unknown as { holidayKeysBetween: jest.Mock };
 
 const employee = {
   _id: { toString: () => 'emp1' },
@@ -67,7 +98,20 @@ beforeEach(() => {
   runModel.create.mockResolvedValue(run);
   payroll.insertMany.mockResolvedValue([]);
   employees.find.mockResolvedValue([employee]);
+  leaveRequests.find.mockReturnValue({
+    select: jest.fn().mockReturnValue({ lean: jest.fn().mockResolvedValue([]) }),
+  });
+  holidays.holidayKeysBetween.mockResolvedValue(new Set());
   settings.organizationCurrency.mockResolvedValue('PKR');
+  settings.organizationStatutorySettings.mockResolvedValue({
+    currency: 'PKR',
+    workingDays: [1, 2, 3, 4, 5],
+    taxEnabled: false,
+    eobiEnabled: false,
+    minimumWage: 37000,
+    providentFundEmployeePercent: 0,
+    providentFundEmployerPercent: 0,
+  });
 });
 
 describe('payroll run currency', () => {
@@ -96,7 +140,11 @@ describe('payroll run currency', () => {
       expect.objectContaining({ currency: 'PKR', status: 'draft' }),
     );
     expect(payroll.insertMany).toHaveBeenCalledWith([
-      expect.objectContaining({ currency: 'PKR', netPay: 190000 }),
+      expect.objectContaining({
+        currency: 'PKR',
+        netPay: 190000,
+        payslipNumber: 'PS-202611-0001',
+      }),
     ]);
     expect(runModel.create).toHaveBeenCalledWith(
       expect.objectContaining({ employeeCount: 1, totalNetPay: 190000, currency: 'PKR' }),

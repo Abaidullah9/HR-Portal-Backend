@@ -18,6 +18,16 @@ export const authorize = (action: string) => {
         throw new AppError(MESSAGES.ROLE_NOT_FOUND, StatusCode.FORBIDDEN);
       }
 
+      // A role from another organisation must not grant anything here, even if
+      // the user record still points at it.
+      if (
+        user.organizationId &&
+        role.organizationId &&
+        role.organizationId.toString() !== user.organizationId.toString()
+      ) {
+        throw new AppError(MESSAGES.NOT_AUTHORIZED, StatusCode.FORBIDDEN);
+      }
+
       const actions = role.actions as any[];
       const hasPermission = actions.some(
         (actionDoc: any) => actionDoc.actionName === action

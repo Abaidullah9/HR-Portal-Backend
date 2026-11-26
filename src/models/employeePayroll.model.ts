@@ -6,6 +6,8 @@ export interface IEmployeePayroll extends Document {
   employeeId: mongoose.Types.ObjectId;
   /** The run that produced this record, when it came from a generated batch. */
   payRunId?: mongoose.Types.ObjectId;
+  /** Human reference printed on the payslip, e.g. PS-202611-0007. */
+  payslipNumber?: string;
   currency?: string;
   baseSalary: number;
   allowances: { type: string; amount: number; taxable: boolean }[];
@@ -22,6 +24,7 @@ const payrollSchema = new Schema<IEmployeePayroll>({
   organizationId: { type: Schema.Types.ObjectId, ref: 'Organization', index: true },
   employeeId: { type: Schema.Types.ObjectId, ref: 'Employee', required: true, index: true },
   payRunId: { type: Schema.Types.ObjectId, ref: 'PayrollRun', index: true },
+  payslipNumber: { type: String, trim: true },
   currency: { type: String, uppercase: true, trim: true, default: 'PKR' },
   baseSalary: { type: Number, required: true },
   allowances: [{
@@ -47,6 +50,11 @@ const payrollSchema = new Schema<IEmployeePayroll>({
   status: { type: String, enum: ['pending', 'completed', 'failed', 'reversed'], default: 'pending', index: true }
 }, { timestamps: true });
 payrollSchema.index({ employeeId: 1, payPeriodStart: 1 });
+// A payslip reference must identify exactly one payslip within the organisation.
+payrollSchema.index(
+  { organizationId: 1, payslipNumber: 1 },
+  { unique: true, partialFilterExpression: { payslipNumber: { $type: 'string' } } },
+);
 // A payroll run writes one record per employee, so repeating a run must not pay
 // the same person twice. The index is partial rather than sparse: repeated
 // hand-entered records have no run, and a sparse index would treat their missing

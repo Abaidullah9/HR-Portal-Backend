@@ -2,13 +2,25 @@ import mongoose from 'mongoose';
 import payrollRunModel from '../models/payrollRun.model';
 import payrollModel from '../models/employeePayroll.model';
 import employeeModel from '../models/employee.model';
+import leaveRequestModel from '../models/leaveRequest.model';
+import userModel from '../models/user.model';
 import compensationServices from './compensation.services';
 import notificationServices from './notification.services';
-import { organizationCurrency } from './organizationSetting.services';
+import holidayServices from './holiday.services';
+import { organizationStatutorySettings } from './organizationSetting.services';
+import { notifyPayslipCompleted } from './payslipNotification.services';
 import { AppError } from '../utils/helper/AppError';
 import { StatusCode } from '../utils/helper/constants/enum';
 import { tenantFields, tenantFilter } from '../utils/context';
-import { endOfDay, isDayKey, startOfDay, todayKey } from '../utils/dates';
+import {
+  dayRate,
+  proratedSalary,
+  statutoryDeductions,
+  unpaidLeaveDays,
+  type UnpaidLeaveLike,
+} from '../utils/payrollStatutory';
+import { endOfDay, isDayKey, startOfDay, todayKey, workingDaysBetween } from '../utils/dates';
+import { toCsv } from '../utils/csv';
 import { getPagination, paginatedResult, type PaginationQuery } from '../utils/common';
 
 const roundMoney = (value: number) => Math.round(value * 100) / 100;
@@ -19,6 +31,10 @@ export interface GenerateRunInput {
   notes?: string;
   currency?: string;
 }
+
+/** A payslip reference that is stable to read out over the phone. */
+const payslipNumber = (periodEnd: string, index: number) =>
+  `PS-${periodEnd.slice(0, 7).replace('-', '')}-${String(index + 1).padStart(4, '0')}`;
 
 /**
  * Generates one payroll run.
@@ -40,10 +56,18 @@ export const generateRun = async (input: GenerateRunInput, actorId?: string) => 
     throw new AppError('The pay period end must be after its start', StatusCode.BAD_REQUEST);
   }
 
-  const runCurrency = input.currency?.trim().toUpperCase() || (await organizationCurrency());
+  const settings = await organizationStatutorySettings();
+  const runCurrency = input.currency?.trim().toUpperCase() || settings.currency;
 
   if (!/^[A-Z]{3}$/.test(runCurrency)) {
     throw new AppError('The run currency must be a three-letter ISO code', StatusCode.BAD_REQUEST);
+  }
+
+  const holidays = await holidayServices.holidayKeysBetween(input.periodStart, input.periodEnd);
+  const workingDayOptions = { workingDays: settings.workingDays, holidays };
+  const periodDays = workingDaysBetween(input.periodStart, input.periodEnd, workingDayOptions);
+  if (periodDays === 0) {
+    throw new AppError('That pay period contains no working days', StatusCode.BAD_REQUEST);
   }
 
   const overlapping = await payrollRunModel.findOne(
@@ -60,22 +84,56 @@ export const generateRun = async (input: GenerateRunInput, actorId?: string) => 
     );
   }
 
-  const employees = await employeeModel.find(tenantFilter({ isActive: true }));
-  const priced: { employeeId: mongoose.Types.ObjectId; salary: number }[] = [];
+  // Leavers are inactive by the time the run is generated, but a person whose
+  // exit falls inside the period is still owed the days they worked.
+  const employees = await employeeModel.find(
+    tenantFilter({
+      $or: [
+        { isActive: true },
+        { exitDate: { $gte: startOfDay(input.periodStart), $lt: endOfDay(input.periodEnd) } },
+      ],
+    }),
+  );
+
+  // One query for the period's approved unpaid leave, grouped per employee,
+  // rather than a query per person.
+  const leaveRows = await leaveRequestModel
+    .find(
+      tenantFilter({
+        leaveStatus: 'approved',
+        fromDate: { $lte: endOfDay(input.periodEnd) },
+        toDate: { $gte: startOfDay(input.periodStart) },
+      }),
+    )
+    .select('employeeId leaveType fromDate toDate')
+    .lean();
+
+  const unpaidByEmployee = new Map<string, UnpaidLeaveLike[]>();
+  for (const row of leaveRows as unknown as (UnpaidLeaveLike & { employeeId: unknown })[]) {
+    const key = String(row.employeeId);
+    const list = unpaidByEmployee.get(key) ?? [];
+    list.push(row);
+    unpaidByEmployee.set(key, list);
+  }
+
+  const priced: {
+    employeeId: mongoose.Types.ObjectId;
+    baseSalary: number;
+    deductions: { type: string; amount: number; note?: string }[];
+    netPay: number;
+  }[] = [];
   let skipped = 0;
 
   for (const employee of employees) {
-    const salary = await compensationServices.salaryEffectiveOn(
-      employee._id.toString(),
-      input.periodEnd,
-    );
+    const employeeId = employee._id.toString();
+    const salary = await compensationServices.salaryEffectiveOn(employeeId, input.periodEnd);
     if (!salary || salary <= 0) {
       skipped += 1;
       continue;
     }
 
     // An employee with no compensation row is paid in the organisation currency.
-    const currency = (await compensationServices.currencyFor(employee._id.toString())) ?? runCurrency;
+    const currency = (await compensationServices.currencyFor(employeeId)) ?? runCurrency;
     if (currency !== runCurrency) {
       throw new AppError(
         `This run is in ${runCurrency}, but ${employee.name} (${employee.employeeCode ?? employee._id}) is paid in ${currency}. One run cannot mix currencies.`,
@@ -83,12 +141,58 @@ export const generateRun = async (input: GenerateRunInput, actorId?: string) => 
       );
     }
 
-    priced.push({ employeeId: employee._id, salary: roundMoney(salary) });
+    // Joiners earn from their joining date and leavers up to their exit date;
+    // paying either a full month is the usual way payroll overpays.
+    const proration = proratedSalary(
+      salary,
+      input.periodStart,
+      input.periodEnd,
+      employee.joiningDate,
+      employee.exitDate,
+      workingDayOptions,
+    );
+    if (proration.payableDays === 0) {
+      skipped += 1;
+      continue;
+    }
+
+    const baseSalary = roundMoney(proration.amount);
+    const unpaidDays = unpaidLeaveDays(
+      unpaidByEmployee.get(employeeId) ?? [],
+      input.periodStart,
+      input.periodEnd,
+      workingDayOptions,
+    );
+    const unpaidAmount = roundMoney(Math.min(dayRate(baseSalary, proration.payableDays) * unpaidDays, baseSalary));
+
+    const taxablePay = roundMoney(baseSalary - unpaidAmount);
+    const statutory = statutoryDeductions(taxablePay, settings);
+
+    const deductions = [
+      ...(unpaidAmount > 0
+        ? [
+            {
+              type: 'Unpaid leave',
+              amount: unpaidAmount,
+              note: `${unpaidDays} day${unpaidDays === 1 ? '' : 's'} without pay`,
+            },
+          ]
+        : []),
+      ...statutory.deductions,
+    ];
+    const totalDeductions = roundMoney(deductions.reduce((total, item) => total + item.amount, 0));
+
+    priced.push({
+      employeeId: employee._id,
+      baseSalary,
+      deductions,
+      netPay: roundMoney(Math.max(baseSalary - totalDeductions, 0)),
+    });
   }
 
   // Every rejection above happens before the run exists, so a refused run leaves
   // no draft behind for somebody to reverse.
-  const totalNetPay = roundMoney(priced.reduce((total, item) => total + item.salary, 0));
+  const totalNetPay = roundMoney(priced.reduce((total, item) => total + item.netPay, 0));
 
   const run = await payrollRunModel.create({
     ...tenantFields(),
@@ -102,16 +206,17 @@ export const generateRun = async (input: GenerateRunInput, actorId?: string) => 
     ...(actorId ? { createdBy: actorId } : {}),
   });
 
-  const records = priced.map(({ employeeId, salary }) => ({
+  const records = priced.map((item, index) => ({
     ...tenantFields(),
-    employeeId,
+    employeeId: item.employeeId,
     payRunId: run._id,
-    baseSalary: salary,
+    payslipNumber: payslipNumber(input.periodEnd, index),
+    baseSalary: item.baseSalary,
     currency: runCurrency,
     allowances: [],
-    deductions: [],
+    deductions: item.deductions,
     bonuses: [],
-    netPay: salary,
+    netPay: item.netPay,
     payPeriodStart: startOfDay(input.periodStart),
     payPeriodEnd: startOfDay(input.periodEnd),
     paymentMethod: 'bank transfer' as const,
@@ -189,6 +294,53 @@ export const approveRun = async (runId: string, actorId?: string) => {
   return run;
 };
 
+/**
+ * Tells each paid employee their payslip is ready.
+ *
+ * Only people with an active login get mail: a former employee whose account was
+ * revoked at offboarding must not receive a salary message, and the address on
+ * the employee record is not proof that a mailbox still exists.
+ */
+const notifyRunPaid = async (runId: mongoose.Types.ObjectId) => {
+  try {
+    const records = await payrollModel
+      .find({ payRunId: runId })
+      .populate('employeeId', 'name email userId')
+      .lean();
+
+    const userIds = records
+      .map((record) => {
+        const employee = record.employeeId as unknown as { userId?: unknown } | null;
+        return employee?.userId ? String(employee.userId) : null;
+      })
+      .filter((id): id is string => Boolean(id));
+
+    if (userIds.length === 0) return;
+
+    const activeUsers = await userModel
+      .find({ _id: { $in: userIds }, isActive: true })
+      .select('_id')
+      .lean();
+    const active = new Set(activeUsers.map((user) => String(user._id)));
+
+    for (const record of records) {
+      const employee = record.employeeId as unknown as
+        | { _id?: unknown; name?: string; email?: string; userId?: unknown }
+        | null;
+      if (!employee?.userId || !active.has(String(employee.userId))) continue;
+
+      notifyPayslipCompleted({
+        payPeriodStart: record.payPeriodStart,
+        payPeriodEnd: record.payPeriodEnd,
+        ...(record.currency ? { currency: record.currency } : {}),
+        employeeId: employee,
+      });
+    }
+  } catch (error) {
+    console.error('[payroll] payslip notifications failed:', (error as Error)?.message);
+  }
+};
+
 export const markRunPaid = async (runId: string) => {
   const run = await payrollRunModel.findOne(tenantFilter({ _id: runId }));
   if (!run) throw new AppError('Payroll run not found', StatusCode.NOT_FOUND);
@@ -202,6 +354,9 @@ export const markRunPaid = async (runId: string) => {
     tenantFilter({ payRunId: run._id }),
     { $set: { status: 'completed', datePaid: new Date() } },
   );
+
+  // Fire-and-forget: a mail outage must not fail the payment record.
+  void notifyRunPaid(run._id);
 
   return run;
 };
@@ -237,19 +392,30 @@ export const reverseRun = async (runId: string, reason: string) => {
 /** Bank/accounting export for one run, so payment does not need the screen. */
 export const runCsv = async (runId: string): Promise<{ filename: string; csv: string }> => {
   const { run, records } = await getRun(runId);
-  const escape = (value: unknown) => {
-    const text = value === null || value === undefined ? '' : String(value);
-    return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-  };
 
-  const header = ['Employee code', 'Employee', 'Email', 'Base salary', 'Net pay', 'Currency', 'Period start', 'Period end', 'Status'];
+  const header = [
+    'Payslip',
+    'Employee code',
+    'Employee',
+    'Email',
+    'Base salary',
+    'Deductions',
+    'Net pay',
+    'Currency',
+    'Period start',
+    'Period end',
+    'Status',
+  ];
   const rows = records.map((record) => {
     const employee = record.employeeId as unknown as { name?: string; email?: string; employeeCode?: string } | null;
+    const deductions = (record.deductions ?? []).reduce((total, item) => total + (item.amount ?? 0), 0);
     return [
+      record.payslipNumber ?? '',
       employee?.employeeCode ?? '',
       employee?.name ?? '',
       employee?.email ?? '',
       record.baseSalary,
+      Math.round(deductions * 100) / 100,
       record.netPay,
       record.currency ?? run.currency,
       run.periodStart,
@@ -260,7 +426,7 @@ export const runCsv = async (runId: string): Promise<{ filename: string; csv: st
 
   return {
     filename: `payroll-${run.periodStart}-to-${run.periodEnd}.csv`,
-    csv: [header, ...rows].map((row) => row.map(escape).join(',')).join('\n'),
+    csv: toCsv([header, ...rows]),
   };
 };
 

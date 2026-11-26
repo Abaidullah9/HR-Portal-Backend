@@ -6,6 +6,11 @@ export interface CreateOrganizationSettingDTO {
   workingDays?: number[];
   lateAfter?: string;
   currency?: string;
+  taxEnabled?: boolean;
+  eobiEnabled?: boolean;
+  minimumWage?: number;
+  providentFundEmployeePercent?: number;
+  providentFundEmployerPercent?: number;
   logoUrl?: string;
 }
 
@@ -17,5 +22,10 @@ export interface UpdateOrganizationSettingDTO {
   workingDays?: number[];
   lateAfter?: string;
   currency?: string;
+  taxEnabled?: boolean;
+  eobiEnabled?: boolean;
+  minimumWage?: number;
+  providentFundEmployeePercent?: number;
+  providentFundEmployerPercent?: number;
   logoUrl?: string;
 }

@@ -6,7 +6,7 @@ import { StatusCode } from "../utils/helper/constants/enum";
 import { AppError } from "../utils/helper/AppError";
 import { CreateEmployeeDTO, UpdateEmployeeDTO } from "../utils/dtos/employee.dto";
 import { PaginationQuery } from "../utils/common";
-import { recordAudit } from "../utils/helper/audit";
+import { recordAudit, type FieldChange } from "../utils/helper/audit";
 import { canAccessEmployee, resolveReadScope } from "../utils/helper/ownership";
 import type { ImportEmployeeRow } from "../services/employee.services";
 
@@ -88,7 +88,26 @@ const updateEmployee = async (req: Request, res: Response) => {
   try {
     const { _id } = req.params;
     const updateData: UpdateEmployeeDTO = req.body;
-    const result = await employeeServices.updateEmployee(_id as string, updateData);
+    const changes: FieldChange[] = [];
+    const result = await employeeServices.updateEmployee(_id as string, updateData, (diff) =>
+      changes.push(...diff),
+    );
+
+    // The generic middleware only sees the URL. Recording the service's
+    // before/after here is what makes "who changed this salary and from what"
+    // answerable later.
+    await recordAudit(
+      req.userId,
+      {
+        action: 'employee.update',
+        entity: 'Employee',
+        entityId: _id as string,
+        detail: changes.length > 0 ? changes.map((change) => change.field).join(', ') : 'No field changed',
+        changes,
+      },
+      res,
+    );
+
     res.status(StatusCode.OK).json({ success: true, message: MESSAGES.EMPLOYEE_UPDATED_SUCCESSFULLY, data: result });
   } catch (error) {
     sendErrorResponse(res, error);

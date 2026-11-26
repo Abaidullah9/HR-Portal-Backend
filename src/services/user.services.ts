@@ -38,9 +38,10 @@ export const inviteUser = async (input: InviteInput, organizationId?: string) =>
   const existing = await userModel.findOne({ email });
   if (existing) throw new AppError(MESSAGES.EMAIL_ALREADY_EXISTS, StatusCode.CONFLICT);
 
+  // Roles are tenant-owned: an organisation can only hand out its own roles.
   const role = input.roleId
-    ? await roleModel.findById(input.roleId)
-    : await roleModel.findOne({ roleName: input.roleName ?? 'Employee' });
+    ? await roleModel.findOne(tenantFilter({ _id: input.roleId }))
+    : await roleModel.findOne(tenantFilter({ roleName: input.roleName ?? 'Employee' }));
   if (!role) throw new AppError('That role does not exist', StatusCode.BAD_REQUEST);
   if (role.roleName.toLowerCase() === 'admin' && !input.roleId) {
     throw new AppError('Administrator invites must choose the role explicitly', StatusCode.BAD_REQUEST);
@@ -144,18 +145,28 @@ const verifyMfaLogin = async (mfaToken: string, code: string) => {
   if (!mfaToken || !code) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
   const userId = readMfaToken(mfaToken);
-  const user = await userModel.findById(userId).select('+mfaSecret');
+  const user = await userModel.findById(userId).select('+mfaSecret +mfaRecoveryCodes');
   if (!user || !user.isActive || !user.mfaEnabled || !user.mfaSecret) {
     throw new AppError(MESSAGES.INVALID_CREDENTIALS, StatusCode.UNAUTHORIZED);
   }
+
+  // The authenticator is the normal path; a recovery code is the way back in
+  // when the phone is lost, and it is consumed by the attempt.
   if (!verifyTotp(user.mfaSecret, code)) {
-    throw new AppError('That code is not valid. Use the current code from your authenticator app.', StatusCode.UNAUTHORIZED);
+    const hashed = hashToken(code.trim());
+    const remaining = [...(user.mfaRecoveryCodes ?? [])];
+    const index = remaining.indexOf(hashed);
+    if (index === -1) {
+      throw new AppError('That code is not valid. Use the current code from your authenticator app.', StatusCode.UNAUTHORIZED);
+    }
+    remaining.splice(index, 1);
+    user.mfaRecoveryCodes = remaining;
   }
 
   user.lastLogin = new Date();
   await user.save();
 
-  const { password: _, mfaSecret: __, ...safe } = user.toObject();
+  const { password: _, mfaSecret: __, mfaRecoveryCodes: ___, ...safe } = user.toObject();
   return { user: safe, token: generateToken(user._id.toString(), user.tokenVersion ?? 0) };
 };
 
@@ -182,9 +193,14 @@ const enableMfa = async (userId: string, code: string) => {
     throw new AppError('That code did not match. Check the app and try the current code.', StatusCode.BAD_REQUEST);
   }
 
+  // Recovery codes are shown exactly once, at enrolment; only their hash is
+  // kept, so a database dump cannot be replayed as a second factor.
+  const recoveryCodes = Array.from({ length: 10 }, () => crypto.randomBytes(5).toString('hex'));
+
   user.mfaEnabled = true;
+  user.mfaRecoveryCodes = recoveryCodes.map(hashToken);
   await user.save();
-  return { mfaEnabled: true };
+  return { mfaEnabled: true, recoveryCodes };
 };
 
 /** Turns two-factor off; the password is re-checked because this weakens the account. */
@@ -197,7 +213,10 @@ const disableMfa = async (userId: string, password: string) => {
   const matches = await bcrypt.compare(password, user.password);
   if (!matches) throw new AppError('Your password is not correct', StatusCode.BAD_REQUEST);
 
-  await userModel.updateOne({ _id: userId }, { $set: { mfaEnabled: false }, $unset: { mfaSecret: 1 } });
+  await userModel.updateOne(
+    { _id: userId },
+    { $set: { mfaEnabled: false }, $unset: { mfaSecret: 1, mfaRecoveryCodes: 1 } },
+  );
   return { mfaEnabled: false };
 };
 

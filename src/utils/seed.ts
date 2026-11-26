@@ -69,7 +69,7 @@ async function seedDatabase() {
     await mongoose.syncIndexes();
 
     console.log('🌱 Seeding Organization Settings...');
-    await OrganizationSetting.create({
+    const orgSettings = await OrganizationSetting.create({
       organizationName: 'TechCorp Pakistan',
       email: 'admin@techcorp.com',
       phone: '+92-21-111-222-333',
@@ -260,10 +260,10 @@ async function seedDatabase() {
       .map(a => a._id);
 
     const roles = await Role.insertMany([
-      { roleName: 'Admin', actions: adminActionIds },
-      { roleName: 'HR', actions: [...hrActionIds, ...selfServiceActionIds] },
-      { roleName: 'Manager', actions: [...managerActionIds, ...selfServiceActionIds] },
-      { roleName: 'Employee', actions: [...employeeActionIds, ...selfServiceActionIds] },
+      { roleName: 'Admin', actions: adminActionIds, organizationId: orgSettings._id },
+      { roleName: 'HR', actions: [...hrActionIds, ...selfServiceActionIds], organizationId: orgSettings._id },
+      { roleName: 'Manager', actions: [...managerActionIds, ...selfServiceActionIds], organizationId: orgSettings._id },
+      { roleName: 'Employee', actions: [...employeeActionIds, ...selfServiceActionIds], organizationId: orgSettings._id },
     ]);
 
     console.log('🌱 Seeding Departments...');
@@ -276,8 +276,7 @@ async function seedDatabase() {
     console.log('🌱 Seeding Users...');
     const hashedPassword = await bcrypt.hash('Password123!', 10);
 
-    const orgSettings = await OrganizationSetting.findOne();
-    const orgId = orgSettings!._id;
+    const orgId = orgSettings._id;
 
     // Users carry the tenant too: request context derives organizationId from
     // the session user, and employee queries are scoped by it.
@@ -551,7 +550,7 @@ async function seedDatabase() {
       { employeeId: priyaEmp._id, baseSalary: 112000, effectiveFrom: '2023-09-18', reason: 'initial' as const },
     ];
     await Compensation.insertMany(
-      compensationRows.map((row) => ({ ...row, organizationId: orgId, currency: 'USD', createdBy: users[1]!._id })),
+      compensationRows.map((row) => ({ ...row, organizationId: orgId, currency: 'PKR', createdBy: users[1]!._id })),
     );
 
     console.log('🌱 Seeding Holidays...');

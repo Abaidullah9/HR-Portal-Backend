@@ -18,7 +18,8 @@ import { MESSAGES } from '../utils/helper/constants/messages';
 import { getPagination, paginatedResult, PaginationQuery } from '../utils/common';
 import { canAccessEmployee, type ReadScope } from '../utils/helper/ownership';
 import { tenantFilter, tenantFields } from '../utils/context';
-import { isDayKey, todayKey } from '../utils/dates';
+import { dayKey, isDayKey, todayKey } from '../utils/dates';
+import { diffFields, type FieldChange } from '../utils/helper/audit';
 import checklistServices from './checklist.services';
 import compensationServices from './compensation.services';
 import notificationServices from './notification.services';
@@ -168,10 +169,40 @@ const getActiveEmployees = async () => {
   return employees;
 };
 
-const updateEmployee = async (_id: string, updateData: Partial<CreateEmployeeDTO>) => {
+/**
+ * Offboarding revokes access, not just the roster flag.
+ *
+ * A leaver whose login stays active can still read payroll, documents and
+ * colleagues' data. Bumping `tokenVersion` also kills a session they already
+ * have open, and clearing any pending invite/reset token closes the way back in.
+ */
+const revokeOffboardedAccess = async (userId: unknown, employeeId: string) => {
+  const tasks: Promise<unknown>[] = [
+    employeeModel.updateOne({ _id: employeeId }, { $set: { isActive: false } }),
+  ];
+  if (userId) {
+    tasks.push(
+      userModel.updateOne(
+        { _id: userId },
+        {
+          $set: { isActive: false },
+          $inc: { tokenVersion: 1 },
+          $unset: { inviteToken: 1, inviteTokenExpires: 1, resetToken: 1, resetTokenExpires: 1 },
+        },
+      ),
+    );
+  }
+  await Promise.all(tasks);
+};
+
+const updateEmployee = async (
+  _id: string,
+  updateData: Partial<CreateEmployeeDTO>,
+  onChanges?: (changes: FieldChange[]) => void,
+) => {
   if (!_id) throw new AppError(MESSAGES.MISSING_REQUIRED_FIELDS, StatusCode.BAD_REQUEST);
 
-  const before = await employeeModel.findOne(tenantFilter({ _id })).select('exitDate isActive');
+  const before = await employeeModel.findOne(tenantFilter({ _id })).lean();
   if (!before) throw new AppError(MESSAGES.EMPLOYEE_NOT_FOUND, StatusCode.NOT_FOUND);
 
   const updatedEmployee = await employeeModel.findOneAndUpdate(tenantFilter({ _id }), updateData, { returnDocument: 'after' })
@@ -192,6 +223,18 @@ const updateEmployee = async (_id: string, updateData: Partial<CreateEmployeeDTO
         kind: 'employee',
       }),
     );
+  }
+
+  // A future exit date is a plan, not an offboarding: access is cut on the day.
+  const exitDate = updatedEmployee.exitDate;
+  if (exitDate && dayKey(new Date(exitDate)) <= todayKey()) {
+    await revokeOffboardedAccess(before.userId, _id);
+    updatedEmployee.isActive = false;
+  }
+
+  if (onChanges) {
+    const after = updatedEmployee.toObject() as unknown as Record<string, unknown>;
+    onChanges(diffFields(before as unknown as Record<string, unknown>, after, Object.keys(updateData)));
   }
 
   return updatedEmployee;

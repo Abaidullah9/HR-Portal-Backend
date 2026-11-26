@@ -52,9 +52,35 @@ export const organizationCurrency = async (): Promise<string> => {
   return (settings?.currency || 'PKR').toUpperCase();
 };
 
+/**
+ * Everything payroll needs to price a run: currency, working week and the
+ * statutory switches. Defaults match the Pakistani pilot, so an organisation
+ * created before these fields existed still gets tax and EOBI rather than an
+ * under-withheld payslip.
+ */
+export const organizationStatutorySettings = async () => {
+  const settings = await organizationSettingModel
+    .findOne(tenantFilter())
+    .select(
+      'currency workingDays taxEnabled eobiEnabled minimumWage providentFundEmployeePercent providentFundEmployerPercent',
+    );
+
+  return {
+    currency: (settings?.currency || 'PKR').toUpperCase(),
+    workingDays: settings?.workingDays?.length ? settings.workingDays : [1, 2, 3, 4, 5],
+    taxEnabled: settings?.taxEnabled ?? true,
+    eobiEnabled: settings?.eobiEnabled ?? true,
+    minimumWage: settings?.minimumWage ?? 37000,
+    providentFundEmployeePercent: settings?.providentFundEmployeePercent ?? 0,
+    providentFundEmployerPercent: settings?.providentFundEmployerPercent ?? 0,
+  };
+};
+
 export default {
   getOrganizationSettings,
   createOrUpdateOrganization,
   updateOrganizationSettings,
   deleteOrganizationSettings,
+  organizationCurrency,
+  organizationStatutorySettings,
 };

@@ -84,6 +84,7 @@ const buildPayslip = (record: any) => {
       code: employee?.employeeCode,
       position: employee?.position,
     },
+    payslipNumber: record.payslipNumber,
     periodStart: record.payPeriodStart,
     periodEnd: record.payPeriodEnd,
     paymentMethod: record.paymentMethod,

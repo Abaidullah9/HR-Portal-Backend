@@ -1,50 +1,35 @@
-// Mock mongoose
-jest.mock('mongoose', () => ({
-  connection: {
-    readyState: 1,
-  },
-}));
+import request from 'supertest';
+import mongoose from 'mongoose';
+import app from '../app';
 
-describe('Health Endpoint Logic', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
+describe('GET /api/v1/health', () => {
+  const originalState = mongoose.connection.readyState;
+
+  afterEach(() => {
+    mongoose.connection.readyState = originalState;
   });
 
-  it('should return healthy when database is connected', () => {
-    const mongoose = require('mongoose');
+  it('reports a connected database and process uptime', async () => {
     mongoose.connection.readyState = 1;
-    const dbStatus = mongoose.connection.readyState;
-    const isDbConnected = dbStatus === 1;
-    expect(isDbConnected).toBe(true);
-  });
+    const response = await request(app).get('/api/v1/health');
 
-  it('should return unhealthy when database is disconnected', () => {
-    const mongoose = require('mongoose');
-    mongoose.connection.readyState = 0;
-    const dbStatus = mongoose.connection.readyState;
-    const isDbConnected = dbStatus === 1;
-    expect(isDbConnected).toBe(false);
-    mongoose.connection.readyState = 1;
-  });
-
-  it('should have all required response fields', () => {
-    const response = {
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
       success: true,
       message: 'Server is healthy',
-      data: {
-        uptime: process.uptime(),
-        timestamp: new Date().toISOString(),
-        database: {
-          connected: true,
-          readyState: 1,
-        },
-      },
-    };
-    expect(response).toHaveProperty('success');
-    expect(response).toHaveProperty('message');
-    expect(response).toHaveProperty('data');
-    expect(response.data).toHaveProperty('uptime');
-    expect(response.data).toHaveProperty('timestamp');
-    expect(response.data).toHaveProperty('database');
+      data: { database: { connected: true, readyState: 1 } },
+    });
+    expect(response.body.data.uptime).toEqual(expect.any(Number));
+    expect(response.body.data.timestamp).toEqual(expect.any(String));
+  });
+
+  it('returns 503 when the database is disconnected', async () => {
+    mongoose.connection.readyState = 0;
+    const response = await request(app).get('/api/v1/health');
+
+    expect(response.status).toBe(503);
+    expect(response.body.success).toBe(false);
+    expect(response.body.message).toBe('Database disconnected');
+    expect(response.body.data.database.connected).toBe(false);
   });
 });

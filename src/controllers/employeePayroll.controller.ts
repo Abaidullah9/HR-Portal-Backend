@@ -37,9 +37,23 @@ const idOf = (value: unknown): string | undefined => {
 const payrollSnapshot = (record: any): Record<string, unknown> => ({
   employeeId: idOf(record.employeeId),
   baseSalary: record.baseSalary,
-  allowances: record.allowances ?? [],
-  deductions: record.deductions ?? [],
-  bonuses: record.bonuses ?? [],
+  // Mongoose subdocuments carry parent references, which a deep diff would
+  // follow forever. Audit only the fields a reviewer needs to see.
+  allowances: (record.allowances ?? []).map((line: any) => ({
+    type: line.type,
+    amount: line.amount,
+    taxable: line.taxable,
+  })),
+  deductions: (record.deductions ?? []).map((line: any) => ({
+    type: line.type,
+    amount: line.amount,
+    note: line.note,
+  })),
+  bonuses: (record.bonuses ?? []).map((line: any) => ({
+    type: line.type,
+    amount: line.amount,
+    note: line.note,
+  })),
   netPay: record.netPay,
   payPeriodStart: record.payPeriodStart,
   payPeriodEnd: record.payPeriodEnd,

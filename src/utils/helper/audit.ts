@@ -15,15 +15,23 @@ export interface AuditEntry {
 /** What `recordAudit` needs from a response in order to claim the entry. */
 type AuditableResponse = { locals: Record<string, unknown> };
 
-const comparable = (value: unknown): unknown => {
+const comparable = (value: unknown, seen = new WeakSet<object>()): unknown => {
   if (value instanceof Date) return value.toISOString();
-  if (Array.isArray(value)) return value.map(comparable);
+  if (Array.isArray(value)) {
+    if (seen.has(value)) return '[circular]';
+    seen.add(value);
+    return value.map((item) => comparable(item, seen));
+  }
   if (value && typeof value === 'object') {
+    // Mongoose subdocuments point back at their parent. A diff must describe
+    // the change, not walk that reference until the stack runs out.
+    if (seen.has(value)) return '[circular]';
+    seen.add(value);
     const source = value as Record<string, unknown>;
     return Object.keys(source)
       .sort()
       .reduce<Record<string, unknown>>((result, key) => {
-        result[key] = comparable(source[key]);
+        result[key] = comparable(source[key], seen);
         return result;
       }, {});
   }
